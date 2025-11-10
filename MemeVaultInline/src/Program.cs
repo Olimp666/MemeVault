@@ -1,7 +1,8 @@
-﻿class Program
+﻿using MemeVaultInline.Helpers;
+class Program
 {
     static async Task Main(string[] args)
     {
-        Console.WriteLine("Hello World!");
+        Console.WriteLine($"Bot token: {ConfigHelper.BotToken}");
     }
 }
