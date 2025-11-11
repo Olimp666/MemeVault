@@ -8,7 +8,7 @@ namespace MemeVaultControl.Commands;
 public class ListCommand(ITelegramBotClient bot, CancellationToken ct) : CancellableCommand(bot, ct)
 {
     private readonly BackendClient _client = new();
-    private string? _tag;
+    private string[]? _tags;
 
     public override async Task Next(Message message)
     {
@@ -17,13 +17,15 @@ public class ListCommand(ITelegramBotClient bot, CancellationToken ct) : Cancell
 
         TrySetTag(message);
 
-        if (_tag is null)
+        if (_tags is null)
         {
             await Reply(message, "По какому тегу искать?");
             return;
         }
 
-        var images = await GetImages(_tag);
+        if (message.From is null) return;
+
+        var images = await GetImages(message.From.Id, _tags);
 
         if (images is null)
         {
@@ -31,37 +33,32 @@ public class ListCommand(ITelegramBotClient bot, CancellationToken ct) : Cancell
             return;
         }
 
+        var formattedTags = string.Join(", ", _tags);
+
+        if (images.Images.Count == 0)
+        {
+            await Reply(message, $"Для тега {formattedTags} нет совпадений");
+            Finished = true;
+            return;
+        }
+
         const int bound = 10;
 
-        var disposables = new List<IDisposable>();
+        var media = images.Images
+            .Take(bound)
+            .Select(CreateImage)
+            .ToArray();
 
-        try
-        {
-            var media = images.Images
-                .Take(bound)
-                .Select(x => CreateImage(x, disposables))
-                .ToArray();
-
-            // Очень туго
-            await bot.SendMediaGroup(message.Chat.Id, media);
-            var lessMessage = images.Images.Count < bound ? "" : "Показано {bound}";
-            await Reply(message, $"Для тега {_tag} имеется {images.Images.Count} совпадений. {lessMessage}");
-        }
-        finally
-        {
-            disposables.ForEach(x => x.Dispose());
-        }
+        await bot.SendMediaGroup(message.Chat.Id, media);
+        var lessMessage = images.Images.Count < bound ? "" : "Показано {bound}";
+        await Reply(message, $"Для тега {formattedTags} имеется {images.Images.Count} совпадений. {lessMessage}");
 
         Finished = true;
     }
 
-    private InputMediaPhoto CreateImage(string base64, List<IDisposable> disposables)
+    private InputMediaPhoto CreateImage(string fileId)
     {
-        // TODO: Here and in similar clauses add using
-        var bytes = Convert.FromBase64String(base64);
-        var stream = new MemoryStream(bytes);
-        disposables.Add(stream);
-        return new InputMediaPhoto(stream);
+        return new InputMediaPhoto(fileId);
     }
 
     private void TrySetTag(Message message)
@@ -76,14 +73,15 @@ public class ListCommand(ITelegramBotClient bot, CancellationToken ct) : Cancell
         if (parts.Length <= startIndex)
             return;
 
-        _tag = parts[startIndex];
+        _tags = parts[startIndex..];
     }
 
-    private async Task<ListResponse?> GetImages(string tag)
+    private async Task<ListResponse?> GetImages(long userId, IEnumerable<string> tags)
     {
         try
         {
-            var response = await _client.GetList(tag);
+            var request = new ListRequest(userId, tags.ToList());
+            var response = await _client.GetList(request);
             return response;
         }
         catch (Exception ex)

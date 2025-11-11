@@ -34,15 +34,15 @@ public class AddCommand(ITelegramBotClient bot, CancellationToken ct) : Cancella
 
         Finished = true;
         Debug.Assert(message.From?.Id is not null);
-        var imageId = await SendRequest(message.From!.Id, _media, _tags);
+        var success = await SendRequest(message.From!.Id, _media, _tags);
 
-        if (imageId is null)
+        if (!success)
         {
             await Reply(message, "Произошел конфуз при сохранении мема");
             return;
         }
 
-        await SignalSuccess(message, imageId.Value, _tags);
+        await SignalSuccess(message, _tags);
     }
 
     private async Task TrySetMedia(Message message)
@@ -68,7 +68,9 @@ public class AddCommand(ITelegramBotClient bot, CancellationToken ct) : Cancella
             return;
 
         var parts = text.Split(' ');
-        var startIndex = text.StartsWith("/add") ? 1 : 0;
+        var startIndex =
+            text.StartsWith("/add") ? 1 :
+            text.StartsWith("/start") ? 2 : 0;
 
         if (parts.Length <= startIndex)
             return;
@@ -76,25 +78,25 @@ public class AddCommand(ITelegramBotClient bot, CancellationToken ct) : Cancella
         _tags = parts[startIndex..];
     }
 
-    private async Task SignalSuccess(Message message, long imageId, string[] tags)
+    private async Task SignalSuccess(Message message, string[] tags)
     {
         var formattedTags = string.Join(", ", tags);
-        await Reply(message, $"Мем успешно сохранен с тегами [{formattedTags}] и id {imageId}");
+        await Reply(message, $"Мем успешно сохранен с тегами [{formattedTags}]");
     }
 
-    private async Task<long?> SendRequest(long userId, string media, string[] tags)
+    private async Task<bool> SendRequest(long userId, string media, string[] tags)
     {
         var form = new UploadRequest(userId, media, tags);
         try
         {
-            var response = await _client.UploadImage(form);
-            return response?.ImageId;
+            await _client.UploadImage(form);
+            return true;
         }
         catch (Exception ex)
         {
             Console.WriteLine(ex.Message);
         }
 
-        return null;
+        return false;
     }
 }

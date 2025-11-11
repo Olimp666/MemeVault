@@ -1,10 +1,10 @@
 using System.Text.Json.Serialization;
+using Newtonsoft.Json;
 
 namespace MemeVaultControl.Model;
 
-[Serializable]
+[JsonObject]
 public class ListResponse
 {
-    [JsonPropertyName("images")]
-    public required List<string> Images { get; set; }
+    [JsonProperty("tg_file_ids")] public required List<string> Images { get; set; }
 }
