@@ -7,8 +7,8 @@ import (
 )
 
 type ImageRepository interface {
-	Add(data []byte, userID int64, tags []string) (*models.Image, error)
-	GetByTag(tag string) ([]*models.Image, error)
+	Add(tgFileID string, userID int64, tags []string) error
+	GetByTags(tags []string, userID int64) ([]*models.Image, error)
 }
 
 type Service struct {
@@ -21,31 +21,31 @@ func NewService(repo ImageRepository) *Service {
 	}
 }
 
-func (s *Service) UploadImage(data []byte, userID int64, tags []string) (*models.Image, error) {
-	if len(data) == 0 {
-		return nil, fmt.Errorf("image data is empty")
+func (s *Service) UploadImage(tgFileID string, userID int64, tags []string) error {
+	if tgFileID == "" {
+		return fmt.Errorf("tg_file_id is empty")
 	}
 
+	if len(tags) == 0 {
+		return fmt.Errorf("at least one tag is required")
+	}
+
+	err := s.repo.Add(tgFileID, userID, tags)
+	if err != nil {
+		return fmt.Errorf("failed to upload image: %w", err)
+	}
+
+	return nil
+}
+
+func (s *Service) ImagesByTags(tags []string, userID int64) ([]*models.Image, error) {
 	if len(tags) == 0 {
 		return nil, fmt.Errorf("at least one tag is required")
 	}
 
-	image, err := s.repo.Add(data, userID, tags)
+	images, err := s.repo.GetByTags(tags, userID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to upload image: %w", err)
-	}
-
-	return image, nil
-}
-
-func (s *Service) ImagesByTag(tag string) ([]*models.Image, error) {
-	if tag == "" {
-		return nil, fmt.Errorf("tag is required")
-	}
-
-	images, err := s.repo.GetByTag(tag)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get images by tag: %w", err)
+		return nil, fmt.Errorf("failed to get images by tags: %w", err)
 	}
 
 	return images, nil

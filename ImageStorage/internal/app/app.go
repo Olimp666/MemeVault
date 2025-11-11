@@ -128,7 +128,7 @@ func (a *Application) initServer() error {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/upload", handler.UploadImage)
-	mux.HandleFunc("/images", handler.ImagesByTag)
+	mux.HandleFunc("/images", handler.ImagesByTags)
 
 	a.server = &http.Server{
 		Addr:    a.cfg.ServerURL,

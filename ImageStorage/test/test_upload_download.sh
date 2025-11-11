@@ -8,111 +8,135 @@ NC='\033[0m' # No Color
 
 # Настройки
 SERVER_URL="http://localhost"
-TEST_IMAGE="test_image.jpg"
-DOWNLOADED_IMAGE="downloaded_image.jpg"
-USER_ID=1
-TAG="test"
+USER_ID=123456789
+TG_FILE_ID="AgACAgIAAxkBAAIC_test_file_id_12345"
+TAGS='["meme", "funny", "test"]'
 
-echo -e "${YELLOW}=== Тест загрузки и скачивания изображения ===${NC}"
+echo -e "${YELLOW}=== Тест сохранения и получения tg_file_id ===${NC}"
 
-# Проверка наличия тестового изображения
-if [ ! -f "$TEST_IMAGE" ]; then
-    echo -e "${RED}Ошибка: Файл $TEST_IMAGE не найден!${NC}"
-    echo "Пожалуйста, поместите тестовое изображение в директорию test/"
+echo -e "${YELLOW}1. Загрузка метаданных изображения (tg_file_id) на сервер...${NC}"
+
+# Загрузка tg_file_id с тегами
+HTTP_CODE=$(curl -s -w "%{http_code}" -o /tmp/upload_response.txt -X POST \
+  "$SERVER_URL/upload?user_id=$USER_ID&tg_file_id=$TG_FILE_ID" \
+  -H "Content-Type: application/json" \
+  -d "{\"tags\": [\"meme\", \"funny\", \"test\"]}")
+
+if [ "$HTTP_CODE" != "201" ]; then
+    echo -e "${RED}Ошибка: Неожиданный HTTP код: $HTTP_CODE${NC}"
+    echo "Ответ сервера:"
+    cat /tmp/upload_response.txt
+    rm -f /tmp/upload_response.txt
     exit 1
 fi
 
-echo -e "${YELLOW}1. Загрузка изображения на сервер...${NC}"
+echo -e "${GREEN}✓ Метаданные успешно сохранены (HTTP 201)${NC}"
+echo "TG File ID: $TG_FILE_ID"
+echo "Tags: meme, funny, test"
 
-# Загрузка изображения
-UPLOAD_RESPONSE=$(curl -s -X POST "$SERVER_URL/upload" \
-  -F "image=@$TEST_IMAGE" \
-  -F "user_id=$USER_ID" \
-  -F "tags=[\"$TAG\"]")
+echo -e "${YELLOW}2. Получение tg_file_id по всем тегам...${NC}"
 
-if [ $? -ne 0 ]; then
-    echo -e "${RED}Ошибка: Не удалось отправить запрос на загрузку${NC}"
-    exit 1
-fi
-
-echo "Ответ сервера: $UPLOAD_RESPONSE"
-
-# Извлечение image_id из ответа
-IMAGE_ID=$(echo "$UPLOAD_RESPONSE" | grep -o '"image_id":[0-9]*' | grep -o '[0-9]*')
-
-if [ -z "$IMAGE_ID" ]; then
-    echo -e "${RED}Ошибка: Не удалось получить image_id из ответа${NC}"
-    echo "Ответ сервера: $UPLOAD_RESPONSE"
-    exit 1
-fi
-
-echo -e "${GREEN}✓ Изображение успешно загружено с ID: $IMAGE_ID${NC}"
-
-echo -e "${YELLOW}2. Получение изображения по тегу '$TAG'...${NC}"
-
-# Получение изображений по тегу
-GET_RESPONSE=$(curl -s -X GET "$SERVER_URL/images?tag=$TAG")
+# Получение изображений по тегам (должны быть все теги)
+GET_RESPONSE=$(curl -s -X POST "$SERVER_URL/images?user_id=$USER_ID" \
+  -H "Content-Type: application/json" \
+  -d '{"tags": ["meme", "funny", "test"]}')
 
 if [ $? -ne 0 ]; then
     echo -e "${RED}Ошибка: Не удалось получить изображения${NC}"
     exit 1
 fi
 
-# Проверка, что получен массив изображений
-IMAGES_COUNT=$(echo "$GET_RESPONSE" | grep -o '"images":\[' | wc -l)
+echo "Ответ сервера: $GET_RESPONSE"
 
-if [ "$IMAGES_COUNT" -eq 0 ]; then
-    echo -e "${RED}Ошибка: В ответе отсутствует массив images${NC}"
-    echo "Ответ сервера: $GET_RESPONSE"
+# Проверка, что получен массив tg_file_ids
+if ! echo "$GET_RESPONSE" | grep -q '"tg_file_ids"'; then
+    echo -e "${RED}Ошибка: В ответе отсутствует поле tg_file_ids${NC}"
     exit 1
 fi
 
 echo -e "${GREEN}✓ Получен ответ от сервера${NC}"
 
-# Извлечение первого изображения из массива (base64)
-IMAGE_BASE64=$(echo "$GET_RESPONSE" | grep -o '"images":\["[^"]*"' | sed 's/"images":\["//' | sed 's/"$//')
+# Извлечение tg_file_ids из ответа
+RETURNED_FILE_ID=$(echo "$GET_RESPONSE" | grep -o "\"$TG_FILE_ID\"" | head -1 | tr -d '"')
 
-if [ -z "$IMAGE_BASE64" ]; then
-    echo -e "${RED}Ошибка: Не удалось извлечь данные изображения${NC}"
+if [ -z "$RETURNED_FILE_ID" ]; then
+    echo -e "${RED}Ошибка: Загруженный tg_file_id не найден в результатах${NC}"
+    echo "Ожидали: $TG_FILE_ID"
+    echo "Получили: $GET_RESPONSE"
     exit 1
 fi
 
-echo -e "${YELLOW}3. Декодирование и сохранение изображения...${NC}"
+echo -e "${GREEN}✓ TG File ID найден в результатах${NC}"
 
-# Декодирование base64 и сохранение в файл
-echo "$IMAGE_BASE64" | base64 -d > "$DOWNLOADED_IMAGE"
+echo -e "${YELLOW}3. Проверка фильтрации по тегам (частичное совпадение)...${NC}"
 
-if [ $? -ne 0 ]; then
-    echo -e "${RED}Ошибка: Не удалось декодировать изображение${NC}"
+# Попытка получить с неполным набором тегов (должна вернуть результат)
+GET_PARTIAL=$(curl -s -X POST "$SERVER_URL/images?user_id=$USER_ID" \
+  -H "Content-Type: application/json" \
+  -d '{"tags": ["meme", "funny"]}')
+
+if echo "$GET_PARTIAL" | grep -q "\"$TG_FILE_ID\""; then
+    echo -e "${GREEN}✓ Частичный набор тегов работает корректно${NC}"
+else
+    echo -e "${RED}Ошибка: Изображение не найдено с частичным набором тегов${NC}"
     exit 1
 fi
 
-if [ ! -f "$DOWNLOADED_IMAGE" ]; then
-    echo -e "${RED}Ошибка: Файл $DOWNLOADED_IMAGE не был создан${NC}"
+echo -e "${YELLOW}4. Проверка фильтрации с несуществующим тегом...${NC}"
+
+# Попытка получить с тегом, которого нет (не должна вернуть результат)
+GET_WRONG=$(curl -s -X POST "$SERVER_URL/images?user_id=$USER_ID" \
+  -H "Content-Type: application/json" \
+  -d '{"tags": ["nonexistent"]}')
+
+if echo "$GET_WRONG" | grep -q "\"$TG_FILE_ID\""; then
+    echo -e "${RED}Ошибка: Изображение найдено с несуществующим тегом${NC}"
+    exit 1
+else
+    echo -e "${GREEN}✓ Фильтрация по тегам работает корректно${NC}"
+fi
+
+echo -e "${YELLOW}5. Тест публичных изображений (user_id=0)...${NC}"
+
+# Загрузка публичного изображения
+PUBLIC_FILE_ID="AgACAgIAAxkBAAIC_public_file_id_67890"
+HTTP_CODE=$(curl -s -w "%{http_code}" -o /dev/null -X POST \
+  "$SERVER_URL/upload?user_id=0&tg_file_id=$PUBLIC_FILE_ID" \
+  -H "Content-Type: application/json" \
+  -d '{"tags": ["public", "meme"]}')
+
+if [ "$HTTP_CODE" != "201" ]; then
+    echo -e "${RED}Ошибка: Не удалось загрузить публичное изображение${NC}"
     exit 1
 fi
 
-echo -e "${GREEN}✓ Изображение сохранено в $DOWNLOADED_IMAGE${NC}"
+# Другой пользователь должен видеть публичное изображение
+OTHER_USER_ID=999999999
+GET_PUBLIC=$(curl -s -X POST "$SERVER_URL/images?user_id=$OTHER_USER_ID" \
+  -H "Content-Type: application/json" \
+  -d '{"tags": ["public"]}')
 
-echo -e "${YELLOW}4. Сравнение исходного и скачанного файлов...${NC}"
+if echo "$GET_PUBLIC" | grep -q "\"$PUBLIC_FILE_ID\""; then
+    echo -e "${GREEN}✓ Публичные изображения доступны всем пользователям${NC}"
+else
+    echo -e "${RED}Ошибка: Публичное изображение не доступно другим пользователям${NC}"
+    exit 1
+fi
 
-# Получение хешей файлов
-ORIGINAL_HASH=$(md5sum "$TEST_IMAGE" | awk '{print $1}')
-DOWNLOADED_HASH=$(md5sum "$DOWNLOADED_IMAGE" | awk '{print $1}')
+echo -e "${YELLOW}6. Сравнение загруженного и полученного tg_file_id...${NC}"
 
-echo "MD5 исходного файла:    $ORIGINAL_HASH"
-echo "MD5 скачанного файла:   $DOWNLOADED_HASH"
-
-# Сравнение файлов
-if [ "$ORIGINAL_HASH" == "$DOWNLOADED_HASH" ]; then
-    echo -e "${GREEN}✓ УСПЕХ: Файлы идентичны!${NC}"
-    echo -e "${GREEN}=== Тест пройден успешно ===${NC}"
+if [ "$RETURNED_FILE_ID" == "$TG_FILE_ID" ]; then
+    echo -e "${GREEN}✓ УСПЕХ: TG File ID совпадают!${NC}"
+    echo "Загружено: $TG_FILE_ID"
+    echo "Получено:  $RETURNED_FILE_ID"
+    echo -e "${GREEN}=== Все тесты пройдены успешно ===${NC}"
     
-    # Удаление скачанного файла
-    rm -f "$DOWNLOADED_IMAGE"
+    # Очистка
+    rm -f /tmp/upload_response.txt
     exit 0
 else
-    echo -e "${RED}✗ ОШИБКА: Файлы различаются!${NC}"
-    echo "Скачанный файл сохранен как $DOWNLOADED_IMAGE для анализа"
+    echo -e "${RED}✗ ОШИБКА: TG File ID различаются!${NC}"
+    echo "Загружено: $TG_FILE_ID"
+    echo "Получено:  $RETURNED_FILE_ID"
     exit 1
 fi

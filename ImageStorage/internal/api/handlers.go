@@ -1,10 +1,8 @@
 package api
 
 import (
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"strconv"
 
@@ -12,8 +10,8 @@ import (
 )
 
 type ImageService interface {
-	UploadImage(data []byte, userID int64, tags []string) (*models.Image, error)
-	ImagesByTag(tag string) ([]*models.Image, error)
+	UploadImage(tgFileID string, userID int64, tags []string) error
+	ImagesByTags(tags []string, userID int64) ([]*models.Image, error)
 }
 
 type Handler struct {
@@ -33,16 +31,16 @@ func (h *Handler) UploadImage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err := r.ParseMultipartForm(32 << 20)
-	if err != nil {
-		http.Error(w, fmt.Sprintf("failed to parse form: %v", err), http.StatusBadRequest)
+	tgFileID := r.URL.Query().Get("tg_file_id")
+	if tgFileID == "" {
+		http.Error(w, "tg_file_id query parameter is required", http.StatusBadRequest)
 
 		return
 	}
 
-	userIDStr := r.FormValue("user_id")
+	userIDStr := r.URL.Query().Get("user_id")
 	if userIDStr == "" {
-		http.Error(w, "user_id is required", http.StatusBadRequest)
+		http.Error(w, "user_id query parameter is required", http.StatusBadRequest)
 
 		return
 	}
@@ -54,65 +52,52 @@ func (h *Handler) UploadImage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tagsJSON := r.FormValue("tags")
-	if tagsJSON == "" {
-		http.Error(w, "tags are required", http.StatusBadRequest)
+	var req models.TagsRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, fmt.Sprintf("failed to parse request: %v", err), http.StatusBadRequest)
 
 		return
 	}
 
-	var tags []string
-	if err := json.Unmarshal([]byte(tagsJSON), &tags); err != nil {
-		http.Error(w, fmt.Sprintf("invalid tags format: %v", err), http.StatusBadRequest)
-
-		return
-	}
-
-	file, _, err := r.FormFile("image")
-	if err != nil {
-		http.Error(w, fmt.Sprintf("failed to get image file: %v", err), http.StatusBadRequest)
-
-		return
-	}
-
-	defer file.Close()
-
-	imageData, err := io.ReadAll(file)
-	if err != nil {
-		http.Error(w, fmt.Sprintf("failed to read image: %v", err), http.StatusInternalServerError)
-
-		return
-	}
-
-	image, err := h.service.UploadImage(imageData, userID, tags)
+	err = h.service.UploadImage(tgFileID, userID, req.Tags)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("failed to upload image: %v", err), http.StatusInternalServerError)
 
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(models.UploadResponse{
-		ImageID: image.ID,
-	})
 }
 
-func (h *Handler) ImagesByTag(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
+func (h *Handler) ImagesByTags(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 
 		return
 	}
 
-	tag := r.URL.Query().Get("tag")
-	if tag == "" {
-		http.Error(w, "tag parameter is required", http.StatusBadRequest)
+	userIDStr := r.URL.Query().Get("user_id")
+	if userIDStr == "" {
+		http.Error(w, "user_id query parameter is required", http.StatusBadRequest)
 
 		return
 	}
 
-	images, err := h.service.ImagesByTag(tag)
+	userID, err := strconv.ParseInt(userIDStr, 10, 64)
+	if err != nil {
+		http.Error(w, "invalid user_id", http.StatusBadRequest)
+
+		return
+	}
+
+	var req models.TagsRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, fmt.Sprintf("failed to parse request: %v", err), http.StatusBadRequest)
+
+		return
+	}
+
+	images, err := h.service.ImagesByTags(req.Tags, userID)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("failed to get images: %v", err), http.StatusInternalServerError)
 
@@ -120,12 +105,11 @@ func (h *Handler) ImagesByTag(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response := models.GetImagesResponse{
-		Images: make([]string, 0, len(images)),
+		TgFileIDs: make([]string, 0, len(images)),
 	}
 
 	for _, img := range images {
-		encoded := base64.StdEncoding.EncodeToString(img.Data)
-		response.Images = append(response.Images, encoded)
+		response.TgFileIDs = append(response.TgFileIDs, img.TgFileID)
 	}
 
 	w.Header().Set("Content-Type", "application/json")

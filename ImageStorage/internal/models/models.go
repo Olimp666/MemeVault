@@ -1,26 +1,22 @@
 package models
 
+import "time"
+
 type Image struct {
-	ID     int64  `db:"id"`
-	UserID int64  `db:"user_id"`
-	Data   []byte `db:"data"`
+	TgFileID  string    `db:"tg_file_id"`
+	UserID    int64     `db:"user_id"`
+	CreatedAt time.Time `db:"created_at"`
 }
 
 type Tag struct {
-	ID      int64  `db:"id"`
-	ImageID int64  `db:"image_id"`
-	Name    string `db:"name"`
+	TgFileID string `db:"tg_file_id"`
+	Name     string `db:"name"`
 }
 
-type UploadRequest struct {
-	UserID int64    `json:"user_id"`
-	Tags   []string `json:"tags"`
-}
-
-type UploadResponse struct {
-	ImageID int64 `json:"image_id"`
+type TagsRequest struct {
+	Tags []string `json:"tags"`
 }
 
 type GetImagesResponse struct {
-	Images []string `json:"images"`
+	TgFileIDs []string `json:"tg_file_ids"`
 }
