@@ -13,10 +13,12 @@ public class BackendClient
     {
         var body = new StringContent(JsonConvert.SerializeObject(uploadRequest));
         var response = await _client.PostAsync(
-            _serverUrl + $"/upload?user_id={uploadRequest.UserId}&tg_file_id={uploadRequest.Image}",
+            _serverUrl + $"/upload?user_id={uploadRequest.UserId}" +
+            $"&tg_file_id={uploadRequest.Image}" +
+            $"&file_type={JsonConvert.SerializeObject(uploadRequest.MediaType).Replace("\"", "")}",
             body
         );
-        
+
         response.EnsureSuccessStatusCode();
     }
 
@@ -30,6 +32,6 @@ public class BackendClient
 
         var content = await response.Content.ReadAsStringAsync();
         response.EnsureSuccessStatusCode();
-        return  JsonConvert.DeserializeObject<ListResponse>(content);
+        return JsonConvert.DeserializeObject<ListResponse>(content);
     }
 }
