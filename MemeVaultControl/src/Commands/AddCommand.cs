@@ -8,7 +8,7 @@ namespace MemeVaultControl.Commands;
 
 public class AddCommand(ITelegramBotClient bot, CancellationToken ct) : CancellableCommand(bot, ct)
 {
-    private MemoryStream? _media;
+    private string? _media;
     private string[]? _tags;
     private readonly BackendClient _client = new();
 
@@ -31,9 +31,6 @@ public class AddCommand(ITelegramBotClient bot, CancellationToken ct) : Cancella
             await Reply(message, "Предоставьте теги");
             return;
         }
-
-        if (_media is null || _tags is null)
-            return;
 
         Finished = true;
         Debug.Assert(message.From?.Id is not null);
@@ -61,9 +58,7 @@ public class AddCommand(ITelegramBotClient bot, CancellationToken ct) : Cancella
         // TODO: Pick desirable quality
         var photo = photos.Last();
 
-        _media = new MemoryStream();
-        var tgFile = await bot.GetFile(photo.FileId);
-        await bot.DownloadFile(tgFile, _media);
+        _media = photo.FileId;
     }
 
     private void TrySetTags(Message message)
@@ -87,10 +82,9 @@ public class AddCommand(ITelegramBotClient bot, CancellationToken ct) : Cancella
         await Reply(message, $"Мем успешно сохранен с тегами [{formattedTags}] и id {imageId}");
     }
 
-    private async Task<long?> SendRequest(long userId, MemoryStream media, string[] tags)
+    private async Task<long?> SendRequest(long userId, string media, string[] tags)
     {
-        var form = new UploadRequest(userId, media.ToArray(), tags);
-        await media.DisposeAsync();
+        var form = new UploadRequest(userId, media, tags);
         try
         {
             var response = await _client.UploadImage(form);
