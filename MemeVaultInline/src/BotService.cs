@@ -1,4 +1,5 @@
 using MemeVaultInline.Helpers;
+using MemeVaultInline.Models;
 using Telegram.Bot.Exceptions;
 using Telegram.Bot.Types;
 using Telegram.Bot;
@@ -47,10 +48,14 @@ internal class BotService
         var results = new List<InlineQueryResult>();
 
         var client = new RestClient(ConfigHelper.Endpoint);
-        var request = new RestRequest("/test", Method.Get);
-        var response = await client.ExecuteAsync<List<Models.QueryResult>>(request);
+        var request = new RestRequest("/images", Method.Post);
+        request.AddHeader("Content-Type", "application/json");
+        var parsedTags = query.Query.Split().ToList();
+        request.AddQueryParameter("user_id", query.From.Id);
+        request.AddJsonBody(new { tags = parsedTags });
+        var response = await client.ExecuteAsync<MatchResponse>(request);
 
-        var memeList = response.Data;
+        var memeList = response.Data?.ExactMatch;
 
         var cnt = 0;
         foreach (var item in memeList!)
@@ -80,7 +85,7 @@ internal class BotService
                 default:
                     return;
             }
-            
+
             results.Add(result);
             cnt++;
         }
