@@ -10,6 +10,7 @@ NC='\033[0m' # No Color
 SERVER_URL="http://localhost"
 USER_ID=123456789
 TG_FILE_ID="AgACAgIAAxkBAAIC_test_file_id_12345"
+FILE_TYPE="photo"
 TAGS='["meme", "funny", "test"]'
 
 echo -e "${YELLOW}=== Тест сохранения и получения tg_file_id ===${NC}"
@@ -18,7 +19,7 @@ echo -e "${YELLOW}1. Загрузка метаданных изображени�
 
 # Загрузка tg_file_id с тегами
 HTTP_CODE=$(curl -s -w "%{http_code}" -o /tmp/upload_response.txt -X POST \
-  "$SERVER_URL/upload?user_id=$USER_ID&tg_file_id=$TG_FILE_ID" \
+  "$SERVER_URL/upload?user_id=$USER_ID&tg_file_id=$TG_FILE_ID&file_type=$FILE_TYPE" \
   -H "Content-Type: application/json" \
   -d "{\"tags\": [\"meme\", \"funny\", \"test\"]}")
 
@@ -32,11 +33,11 @@ fi
 
 echo -e "${GREEN}✓ Метаданные успешно сохранены (HTTP 201)${NC}"
 echo "TG File ID: $TG_FILE_ID"
+echo "File Type: $FILE_TYPE"
 echo "Tags: meme, funny, test"
 
 echo -e "${YELLOW}2. Получение tg_file_id по всем тегам...${NC}"
 
-# Получение изображений по тегам (должны быть все теги)
 GET_RESPONSE=$(curl -s -X POST "$SERVER_URL/images?user_id=$USER_ID" \
   -H "Content-Type: application/json" \
   -d '{"tags": ["meme", "funny", "test"]}')
@@ -48,37 +49,50 @@ fi
 
 echo "Ответ сервера: $GET_RESPONSE"
 
-# Проверка, что получен массив tg_file_ids
-if ! echo "$GET_RESPONSE" | grep -q '"tg_file_ids"'; then
-    echo -e "${RED}Ошибка: В ответе отсутствует поле tg_file_ids${NC}"
+if ! echo "$GET_RESPONSE" | grep -q '"exact_match"'; then
+    echo -e "${RED}Ошибка: В ответе отсутствует поле exact_match${NC}"
     exit 1
 fi
 
 echo -e "${GREEN}✓ Получен ответ от сервера${NC}"
 
-# Извлечение tg_file_ids из ответа
-RETURNED_FILE_ID=$(echo "$GET_RESPONSE" | grep -o "\"$TG_FILE_ID\"" | head -1 | tr -d '"')
+RETURNED_FILE_ID=$(echo "$GET_RESPONSE" | grep -oP "\"exact_match\".*?\"tg_file_id\":\s*\"$TG_FILE_ID\"" | grep -o "$TG_FILE_ID")
+RETURNED_FILE_TYPE=$(echo "$GET_RESPONSE" | grep -oP "\"exact_match\".*?\"tg_file_id\":\s*\"$TG_FILE_ID\".*?\"file_type\":\s*\"\K[^\"]+")
 
 if [ -z "$RETURNED_FILE_ID" ]; then
-    echo -e "${RED}Ошибка: Загруженный tg_file_id не найден в результатах${NC}"
+    echo -e "${RED}Ошибка: Загруженный tg_file_id не найден в exact_match${NC}"
     echo "Ожидали: $TG_FILE_ID"
     echo "Получили: $GET_RESPONSE"
     exit 1
 fi
 
-echo -e "${GREEN}✓ TG File ID найден в результатах${NC}"
+echo -e "${GREEN}✓ TG File ID найден в exact_match${NC}"
+
+if [ "$RETURNED_FILE_TYPE" != "$FILE_TYPE" ]; then
+    echo -e "${RED}Ошибка: File type не совпадает${NC}"
+    echo "Ожидали: $FILE_TYPE"
+    echo "Получили: $RETURNED_FILE_TYPE"
+    exit 1
+fi
+
+echo -e "${GREEN}✓ File Type совпадает${NC}"
 
 echo -e "${YELLOW}3. Проверка фильтрации по тегам (частичное совпадение)...${NC}"
 
-# Попытка получить с неполным набором тегов (должна вернуть результат)
 GET_PARTIAL=$(curl -s -X POST "$SERVER_URL/images?user_id=$USER_ID" \
   -H "Content-Type: application/json" \
   -d '{"tags": ["meme", "funny"]}')
 
-if echo "$GET_PARTIAL" | grep -q "\"$TG_FILE_ID\""; then
-    echo -e "${GREEN}✓ Частичный набор тегов работает корректно${NC}"
+if echo "$GET_PARTIAL" | grep -q "\"partial_match\""; then
+    if echo "$GET_PARTIAL" | grep "\"partial_match\"" | grep -q "\"$TG_FILE_ID\""; then
+        echo -e "${GREEN}✓ Изображение найдено в partial_match${NC}"
+    else
+        echo -e "${RED}Ошибка: Изображение не найдено в partial_match${NC}"
+        echo "Получили: $GET_PARTIAL"
+        exit 1
+    fi
 else
-    echo -e "${RED}Ошибка: Изображение не найдено с частичным набором тегов${NC}"
+    echo -e "${RED}Ошибка: Отсутствует поле partial_match в ответе${NC}"
     exit 1
 fi
 
@@ -101,7 +115,7 @@ echo -e "${YELLOW}5. Тест публичных изображений (user_id
 # Загрузка публичного изображения
 PUBLIC_FILE_ID="AgACAgIAAxkBAAIC_public_file_id_67890"
 HTTP_CODE=$(curl -s -w "%{http_code}" -o /dev/null -X POST \
-  "$SERVER_URL/upload?user_id=0&tg_file_id=$PUBLIC_FILE_ID" \
+  "$SERVER_URL/upload?user_id=0&tg_file_id=$PUBLIC_FILE_ID&file_type=video" \
   -H "Content-Type: application/json" \
   -d '{"tags": ["public", "meme"]}')
 
@@ -129,14 +143,50 @@ if [ "$RETURNED_FILE_ID" == "$TG_FILE_ID" ]; then
     echo -e "${GREEN}✓ УСПЕХ: TG File ID совпадают!${NC}"
     echo "Загружено: $TG_FILE_ID"
     echo "Получено:  $RETURNED_FILE_ID"
-    echo -e "${GREEN}=== Все тесты пройдены успешно ===${NC}"
-    
-    # Очистка
-    rm -f /tmp/upload_response.txt
-    exit 0
 else
     echo -e "${RED}✗ ОШИБКА: TG File ID различаются!${NC}"
     echo "Загружено: $TG_FILE_ID"
     echo "Получено:  $RETURNED_FILE_ID"
     exit 1
 fi
+
+echo -e "${YELLOW}7. Тест получения всех изображений пользователя...${NC}"
+
+GET_USER_IMAGES=$(curl -s -X GET "$SERVER_URL/user/images?user_id=$USER_ID")
+
+if [ $? -ne 0 ]; then
+    echo -e "${RED}Ошибка: Не удалось получить изображения пользователя${NC}"
+    exit 1
+fi
+
+echo "Ответ сервера: $GET_USER_IMAGES"
+
+if ! echo "$GET_USER_IMAGES" | grep -q '"images"'; then
+    echo -e "${RED}Ошибка: В ответе отсутствует поле images${NC}"
+    exit 1
+fi
+
+if ! echo "$GET_USER_IMAGES" | grep -q "\"$TG_FILE_ID\""; then
+    echo -e "${RED}Ошибка: Изображение пользователя не найдено${NC}"
+    exit 1
+fi
+
+if ! echo "$GET_USER_IMAGES" | grep -q '"tags"'; then
+    echo -e "${RED}Ошибка: В ответе отсутствуют теги${NC}"
+    exit 1
+fi
+
+if echo "$GET_USER_IMAGES" | grep -q '"meme"' && echo "$GET_USER_IMAGES" | grep -q '"funny"' && echo "$GET_USER_IMAGES" | grep -q '"test"'; then
+    echo -e "${GREEN}✓ Все теги присутствуют в ответе${NC}"
+else
+    echo -e "${RED}Ошибка: Не все теги найдены в ответе${NC}"
+    exit 1
+fi
+
+echo -e "${GREEN}✓ Endpoint /user/images работает корректно${NC}"
+
+echo -e "${GREEN}=== Все тесты пройдены успешно ===${NC}"
+
+# Очистка
+rm -f /tmp/upload_response.txt
+exit 0

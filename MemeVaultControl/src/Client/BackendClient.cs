@@ -1,3 +1,4 @@
+using MemeVaultControl.Helpers;
 using MemeVaultControl.Model;
 using Newtonsoft.Json;
 
@@ -6,16 +7,18 @@ namespace MemeVaultControl.Client;
 public class BackendClient
 {
     private readonly HttpClient _client = new();
-    private const string ServerUrl = "http://localhost";
+    private readonly string _serverUrl = ConfigHelper.ServerUrl;
 
     public async Task UploadImage(UploadRequest uploadRequest)
     {
         var body = new StringContent(JsonConvert.SerializeObject(uploadRequest));
         var response = await _client.PostAsync(
-            ServerUrl + $"/upload?user_id={uploadRequest.UserId}&tg_file_id={uploadRequest.Image}",
+            _serverUrl + $"/upload?user_id={uploadRequest.UserId}" +
+            $"&tg_file_id={uploadRequest.Image}" +
+            $"&file_type={JsonConvert.SerializeObject(uploadRequest.MediaType).Replace("\"", "")}",
             body
         );
-        
+
         response.EnsureSuccessStatusCode();
     }
 
@@ -23,12 +26,12 @@ public class BackendClient
     {
         var body = new StringContent(JsonConvert.SerializeObject(listRequest));
         var response = await _client.PostAsync(
-            ServerUrl + $"/images?user_id={listRequest.UserId}",
+            _serverUrl + $"/images?user_id={listRequest.UserId}",
             body
         );
 
         var content = await response.Content.ReadAsStringAsync();
         response.EnsureSuccessStatusCode();
-        return  JsonConvert.DeserializeObject<ListResponse>(content);
+        return JsonConvert.DeserializeObject<ListResponse>(content);
     }
 }

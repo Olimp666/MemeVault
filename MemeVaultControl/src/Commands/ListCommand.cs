@@ -35,7 +35,9 @@ public class ListCommand(ITelegramBotClient bot, CancellationToken ct) : Cancell
 
         var formattedTags = string.Join(", ", _tags);
 
-        if (images.Images.Count == 0)
+        var media = images.ExactMatch.Concat(images.PartialMatch).ToArray();
+
+        if (media.Length == 0)
         {
             await Reply(message, $"Для тега {formattedTags} нет совпадений");
             Finished = true;
@@ -44,21 +46,27 @@ public class ListCommand(ITelegramBotClient bot, CancellationToken ct) : Cancell
 
         const int bound = 10;
 
-        var media = images.Images
+        var picked = media
             .Take(bound)
             .Select(CreateImage)
             .ToArray();
 
-        await bot.SendMediaGroup(message.Chat.Id, media);
-        var lessMessage = images.Images.Count < bound ? "" : "Показано {bound}";
-        await Reply(message, $"Для тега {formattedTags} имеется {images.Images.Count} совпадений. {lessMessage}");
+        await bot.SendMediaGroup(message.Chat.Id, picked);
+        var lessMessage = media.Length < bound ? "" : $"Показано {bound}";
+        await Reply(message, $"Для тега {formattedTags} имеется {media.Length} совпадений. {lessMessage}");
 
         Finished = true;
     }
 
-    private InputMediaPhoto CreateImage(string fileId)
+    private static IAlbumInputMedia CreateImage(MediaEntry entry)
     {
-        return new InputMediaPhoto(fileId);
+        return entry.MediaType switch
+        {
+            MediaType.Photo => new InputMediaPhoto(entry.FileId),
+            MediaType.Video => new InputMediaVideo(entry.FileId),
+            // MediaType.Gif => ,
+            _ => throw new ArgumentException("Unsupported media type")
+        };
     }
 
     private void TrySetTag(Message message)
