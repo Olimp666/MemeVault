@@ -26,17 +26,29 @@ public class ControlBotUpdateHandler : IUpdateHandler
 
     async Task HandleInlineQuery(ITelegramBotClient botClient, InlineQuery query, CancellationToken ct)
     {
+        var emptyQuery = query.Query.Length == 0;
         var results = new List<InlineQueryResult>();
+        List<MediaItem> memeList;
 
         var client = new RestClient(ConfigHelper.Endpoint);
-        var request = new RestRequest("/images", Method.Post);
-        request.AddHeader("Content-Type", "application/json");
-        var parsedTags = query.Query.Split().ToList();
-        request.AddQueryParameter("user_id", query.From.Id);
-        request.AddJsonBody(new { tags = parsedTags });
-        var response = await client.ExecuteAsync<MatchResponse>(request);
 
-        var memeList = response.Data?.ExactMatch;
+
+        if (!emptyQuery)
+        {
+            var request = new RestRequest("/images", Method.Post);
+            request.AddQueryParameter("user_id", query.From.Id);
+            var parsedTags = query.Query.Split().ToList();
+            request.AddJsonBody(new { tags = parsedTags });
+            var response = await client.ExecuteAsync<MatchResponse>(request);
+            memeList = response.Data?.ExactMatch!;
+        }
+        else
+        {
+            var request = new RestRequest("/user/images");
+            request.AddQueryParameter("user_id", query.From.Id);
+            var response = await client.ExecuteAsync<MediaList>(request);
+            memeList = response.Data!.Images;
+        }
 
         var cnt = 0;
         foreach (var item in memeList!)
