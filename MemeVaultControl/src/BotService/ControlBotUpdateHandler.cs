@@ -52,6 +52,7 @@ public class ControlBotUpdateHandler : IUpdateHandler
         }
 
         var cmd = text.Split(' ').FirstOrDefault()?.ToLower();
+        var args = text.Split(' ').Skip(1);
 
         if (cmd is null || !cmd.StartsWith('/'))
         {
@@ -65,6 +66,7 @@ public class ControlBotUpdateHandler : IUpdateHandler
 
         Command? command = cmd switch
         {
+            "/start" when args.FirstOrDefault() == "upload" => new AddCommand(botClient, ct),
             "/start" or "/help" => new StartCommand(botClient, ct),
             "/add" => new AddCommand(botClient, ct),
             "/list" => new ListCommand(botClient, ct),

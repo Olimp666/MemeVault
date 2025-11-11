@@ -1,33 +1,34 @@
-using System.Text.Json;
 using MemeVaultControl.Model;
+using Newtonsoft.Json;
 
 namespace MemeVaultControl.Client;
 
 public class BackendClient
 {
-    private HttpClient _client = new();
-    private string _serverUrl = "http://localhost";
+    private readonly HttpClient _client = new();
+    private const string ServerUrl = "http://localhost";
 
-    public async Task<UploadResponse?> UploadImage(UploadRequest uploadRequest)
+    public async Task UploadImage(UploadRequest uploadRequest)
     {
+        var body = new StringContent(JsonConvert.SerializeObject(uploadRequest));
         var response = await _client.PostAsync(
-            _serverUrl + "/upload",
-            uploadRequest.ToForm()
+            ServerUrl + $"/upload?user_id={uploadRequest.UserId}&tg_file_id={uploadRequest.Image}",
+            body
         );
-
+        
         response.EnsureSuccessStatusCode();
-        var content = await response.Content.ReadAsStringAsync();
-        return JsonSerializer.Deserialize<UploadResponse>(content);
     }
 
-    public async Task<ListResponse?> GetList(string tag)
+    public async Task<ListResponse?> GetList(ListRequest listRequest)
     {
-        var response = await _client.GetAsync(
-            _serverUrl + $"/images?tag={Uri.EscapeDataString(tag)}"
+        var body = new StringContent(JsonConvert.SerializeObject(listRequest));
+        var response = await _client.PostAsync(
+            ServerUrl + $"/images?user_id={listRequest.UserId}",
+            body
         );
 
-        response.EnsureSuccessStatusCode();
         var content = await response.Content.ReadAsStringAsync();
-        return JsonSerializer.Deserialize<ListResponse>(content);
+        response.EnsureSuccessStatusCode();
+        return  JsonConvert.DeserializeObject<ListResponse>(content);
     }
 }

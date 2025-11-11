@@ -1,5 +1,6 @@
 using Telegram.Bot;
 using Telegram.Bot.Polling;
+using Telegram.Bot.Types.Enums;
 
 namespace MemeVaultControl.BotService;
 
@@ -11,7 +12,7 @@ public class BotService(ITelegramBotClient bot)
     {
         ReceiverOptions receiverOptions = new()
         {
-            AllowedUpdates = [] // receive all update types except ChatMember related updates
+            AllowedUpdates = [UpdateType.Message] // receive all update types except ChatMember related updates
         };
 
         bot.StartReceiving(
