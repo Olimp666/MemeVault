@@ -7,7 +7,7 @@ namespace MemeVaultControl.Client;
 public class BackendClient
 {
     private readonly HttpClient _client = new();
-    private readonly string _serverUrl = ConfigHelper.ServerUrl;
+    private readonly string _serverUrl = ConfigHelper.Endpoint;
 
     public async Task UploadImage(UploadRequest uploadRequest)
     {

@@ -1,6 +1,6 @@
 using System.Text.Json.Serialization;
 
-namespace MemeVaultInline.Models;
+namespace MemeVaultControl.Model;
 
 public class MatchItem
 {

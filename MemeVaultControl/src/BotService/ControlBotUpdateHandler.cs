@@ -3,6 +3,10 @@ using Telegram.Bot;
 using Telegram.Bot.Exceptions;
 using Telegram.Bot.Polling;
 using Telegram.Bot.Types;
+using RestSharp;
+using Telegram.Bot.Types.InlineQueryResults;
+using MemeVaultControl.Model;
+using MemeVaultControl.Helpers;
 
 namespace MemeVaultControl.BotService;
 
@@ -15,8 +19,64 @@ public class ControlBotUpdateHandler : IUpdateHandler
         return update switch
         {
             { Message: { } msg } => HandleMessage(botClient, msg, ct),
+            { InlineQuery: { } query } => HandleInlineQuery(botClient, query, ct),
             _ => Task.CompletedTask
         };
+    }
+
+    async Task HandleInlineQuery(ITelegramBotClient botClient, InlineQuery query, CancellationToken ct)
+    {
+        var results = new List<InlineQueryResult>();
+
+        var client = new RestClient(ConfigHelper.Endpoint);
+        var request = new RestRequest("/images", Method.Post);
+        request.AddHeader("Content-Type", "application/json");
+        var parsedTags = query.Query.Split().ToList();
+        request.AddQueryParameter("user_id", query.From.Id);
+        request.AddJsonBody(new { tags = parsedTags });
+        var response = await client.ExecuteAsync<MatchResponse>(request);
+
+        var memeList = response.Data?.ExactMatch;
+
+        var cnt = 0;
+        foreach (var item in memeList!)
+        {
+            InlineQueryResult result;
+            switch (item.Type)
+            {
+                case FileType.Photo:
+                    result = new InlineQueryResultCachedPhoto(
+                        id: cnt.ToString(),
+                        photoFileId: item.FileId
+                    );
+                    break;
+                case FileType.Gif:
+                    result = new InlineQueryResultCachedGif(
+                        id: cnt.ToString(),
+                        gifFileId: item.FileId
+                    );
+                    break;
+                case FileType.Video:
+                    result = new InlineQueryResultCachedVideo(
+                        id: cnt.ToString(),
+                        videoFileId: item.FileId,
+                        title: "⠀" //TODO figure out video titles
+                    );
+                    break;
+                default:
+                    return;
+            }
+
+            results.Add(result);
+            cnt++;
+        }
+
+        var queryButton = new InlineQueryResultsButton("Загрузить мем")
+        {
+            StartParameter = "upload"
+        };
+        await botClient.AnswerInlineQuery(query.Id, results, cacheTime: 0, isPersonal: true,
+            button: queryButton);
     }
 
     private async Task HandleMessage(ITelegramBotClient botClient, Message message, CancellationToken ct)
