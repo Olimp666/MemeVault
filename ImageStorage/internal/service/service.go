@@ -13,6 +13,9 @@ type ImageRepository interface {
 	ImagesByTags(tags []string, userID int64) ([]*models.ImageWithTags, error)
 	ImagesBySubsetOfTags(tags []string, userID int64) ([]*models.ImageWithTags, error)
 	ImagesByUser(userID int64) ([]*models.ImageWithTags, error)
+	DeleteImage(userID int64, tgFileID string) error
+	DeleteAllUserImages(userID int64) error
+	ReplaceTags(userID int64, tgFileID string, newTags []string) error
 }
 
 type Service struct {
@@ -84,4 +87,51 @@ func (s *Service) ImagesByUser(userID int64) ([]*models.ImageWithTags, error) {
 	}
 
 	return images, nil
+}
+
+func (s *Service) DeleteImage(userID int64, tgFileID string) error {
+	if tgFileID == "" {
+		return fmt.Errorf("tg_file_id is empty")
+	}
+
+	err := s.repo.DeleteImage(userID, tgFileID)
+	if err != nil {
+		return fmt.Errorf("failed to delete image: %w", err)
+	}
+
+	return nil
+}
+
+func (s *Service) DeleteAllUserImages(userID int64) error {
+	err := s.repo.DeleteAllUserImages(userID)
+	if err != nil {
+		return fmt.Errorf("failed to delete all user images: %w", err)
+	}
+
+	return nil
+}
+
+func (s *Service) ReplaceTags(userID int64, tgFileID string, newTags []string) error {
+	if userID == models.DefaultUserID {
+		return fmt.Errorf("cannot replace tags for default user")
+	}
+
+	if tgFileID == "" {
+		return fmt.Errorf("tg_file_id is empty")
+	}
+
+	if len(newTags) == 0 {
+		return fmt.Errorf("at least one tag is required")
+	}
+
+	err := s.repo.ReplaceTags(userID, tgFileID, newTags)
+	if err != nil {
+		return fmt.Errorf("failed to replace tags: %w", err)
+	}
+
+	return nil
+}
+
+func (s *Service) GenerateDescription(imageData []byte) (string, error) {
+	return "метод пока не реализован", nil
 }

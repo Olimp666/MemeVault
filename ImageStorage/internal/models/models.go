@@ -6,6 +6,8 @@ const (
 	FileTypePhoto = "photo"
 	FileTypeVideo = "video"
 	FileTypeGif   = "gif"
+
+	DefaultUserID = 0
 )
 
 type Image struct {

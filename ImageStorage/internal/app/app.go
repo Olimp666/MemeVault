@@ -129,7 +129,11 @@ func (a *Application) initServer() error {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/upload", handler.UploadImage)
 	mux.HandleFunc("/images", handler.ImagesByTags)
+	mux.HandleFunc("/user/images/delete", handler.DeleteAllUserImages)
 	mux.HandleFunc("/user/images", handler.ImagesByUser)
+	mux.HandleFunc("/image/delete", handler.DeleteImage)
+	mux.HandleFunc("/image/tags", handler.ReplaceTags)
+	mux.HandleFunc("/image/generate-description", handler.GenerateDescription)
 
 	a.server = &http.Server{
 		Addr:    a.cfg.ServerURL,

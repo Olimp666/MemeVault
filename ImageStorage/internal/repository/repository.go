@@ -205,3 +205,76 @@ func (s *Repository) ImagesByUser(userID int64) ([]*models.ImageWithTags, error)
 
 	return result, nil
 }
+
+func (s *Repository) DeleteImage(userID int64, tgFileID string) error {
+	query := `DELETE FROM images WHERE user_id = $1 AND tg_file_id = $2;`
+	result, err := s.db.Exec(query, userID, tgFileID)
+	if err != nil {
+		return fmt.Errorf("can't delete image: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("can't get rows affected: %w", err)
+	}
+
+	if rowsAffected == 0 {
+		return fmt.Errorf("image not found")
+	}
+
+	return nil
+}
+
+func (s *Repository) DeleteAllUserImages(userID int64) error {
+	query := `DELETE FROM images WHERE user_id = $1;`
+	_, err := s.db.Exec(query, userID)
+	if err != nil {
+		return fmt.Errorf("can't delete user images: %w", err)
+	}
+
+	return nil
+}
+
+func (s *Repository) ReplaceTags(userID int64, tgFileID string, newTags []string) error {
+	tx, err := s.db.Beginx()
+	if err != nil {
+		return fmt.Errorf("can't begin transaction: %w", err)
+	}
+	defer func() {
+		if err != nil {
+			_ = tx.Rollback()
+		}
+	}()
+
+	var imageID int64
+	queryGetID := `SELECT id FROM images WHERE user_id = $1 AND tg_file_id = $2;`
+	err = tx.Get(&imageID, queryGetID, userID, tgFileID)
+	if err != nil {
+		return fmt.Errorf("image not found: %w", err)
+	}
+
+	queryDeleteTags := `DELETE FROM tags WHERE image_id = $1;`
+	_, err = tx.Exec(queryDeleteTags, imageID)
+	if err != nil {
+		return fmt.Errorf("can't delete old tags: %w", err)
+	}
+
+	if len(newTags) > 0 {
+		queryInsertTag := `INSERT INTO tags (image_id, name) VALUES (:image_id, :name)`
+		for _, tag := range newTags {
+			_, err = tx.NamedExec(queryInsertTag, map[string]interface{}{
+				"image_id": imageID,
+				"name":     tag,
+			})
+			if err != nil {
+				return fmt.Errorf("can't insert tag '%s': %w", tag, err)
+			}
+		}
+	}
+
+	if err = tx.Commit(); err != nil {
+		return fmt.Errorf("can't commit transaction: %w", err)
+	}
+
+	return nil
+}

@@ -13,6 +13,10 @@ type ImageService interface {
 	UploadImage(tgFileID string, userID int64, fileType string, tags []string) error
 	ImagesByTags(tags []string, userID int64) (exactMatch []*models.ImageWithTags, partialMatch []*models.ImageWithTags, err error)
 	ImagesByUser(userID int64) ([]*models.ImageWithTags, error)
+	DeleteImage(userID int64, tgFileID string) error
+	DeleteAllUserImages(userID int64) error
+	ReplaceTags(userID int64, tgFileID string, newTags []string) error
+	GenerateDescription(imageData []byte) (string, error)
 }
 
 type Handler struct {
@@ -177,5 +181,146 @@ func (h *Handler) ImagesByUser(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"images": imageInfos,
+	})
+}
+
+func (h *Handler) DeleteImage(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodDelete {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	userIDStr := r.URL.Query().Get("user_id")
+	if userIDStr == "" {
+		http.Error(w, "user_id query parameter is required", http.StatusBadRequest)
+		return
+	}
+
+	userID, err := strconv.ParseInt(userIDStr, 10, 64)
+	if err != nil {
+		http.Error(w, "invalid user_id", http.StatusBadRequest)
+		return
+	}
+
+	tgFileID := r.URL.Query().Get("tg_file_id")
+	if tgFileID == "" {
+		http.Error(w, "tg_file_id query parameter is required", http.StatusBadRequest)
+		return
+	}
+
+	err = h.service.DeleteImage(userID, tgFileID)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("failed to delete image: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("Image deleted successfully"))
+}
+
+func (h *Handler) DeleteAllUserImages(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodDelete {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	userIDStr := r.URL.Query().Get("user_id")
+	if userIDStr == "" {
+		http.Error(w, "user_id query parameter is required", http.StatusBadRequest)
+		return
+	}
+
+	userID, err := strconv.ParseInt(userIDStr, 10, 64)
+	if err != nil {
+		http.Error(w, "invalid user_id", http.StatusBadRequest)
+		return
+	}
+
+	err = h.service.DeleteAllUserImages(userID)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("failed to delete all user images: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("All user images deleted successfully"))
+}
+
+func (h *Handler) ReplaceTags(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPut {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	userIDStr := r.URL.Query().Get("user_id")
+	if userIDStr == "" {
+		http.Error(w, "user_id query parameter is required", http.StatusBadRequest)
+		return
+	}
+
+	userID, err := strconv.ParseInt(userIDStr, 10, 64)
+	if err != nil {
+		http.Error(w, "invalid user_id", http.StatusBadRequest)
+		return
+	}
+
+	tgFileID := r.URL.Query().Get("tg_file_id")
+	if tgFileID == "" {
+		http.Error(w, "tg_file_id query parameter is required", http.StatusBadRequest)
+		return
+	}
+
+	var req models.TagsRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, fmt.Sprintf("failed to parse request: %v", err), http.StatusBadRequest)
+		return
+	}
+
+	err = h.service.ReplaceTags(userID, tgFileID, req.Tags)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("failed to replace tags: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("Tags replaced successfully"))
+}
+
+func (h *Handler) GenerateDescription(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	err := r.ParseMultipartForm(10 << 20)
+	if err != nil {
+		http.Error(w, "failed to parse multipart form", http.StatusBadRequest)
+		return
+	}
+
+	file, _, err := r.FormFile("image")
+	if err != nil {
+		http.Error(w, "image file is required", http.StatusBadRequest)
+		return
+	}
+	defer file.Close()
+
+	imageData := make([]byte, 10<<20)
+	n, err := file.Read(imageData)
+	if err != nil && err.Error() != "EOF" {
+		http.Error(w, "failed to read image", http.StatusInternalServerError)
+		return
+	}
+	imageData = imageData[:n]
+
+	description, err := h.service.GenerateDescription(imageData)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("failed to generate description: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"description": description,
 	})
 }

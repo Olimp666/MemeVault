@@ -199,8 +199,165 @@ fi
 
 echo -e "${GREEN}✓ Endpoint /user/images работает корректно${NC}"
 
+echo -e "${YELLOW}8. Тест замены тегов...${NC}"
+
+# Загружаем изображение с тегами
+TEST_REPLACE_FILE_ID="test_replace_file_id_99999"
+HTTP_CODE=$(curl -s -w "%{http_code}" -o /dev/null -X POST \
+  "$SERVER_URL/upload?user_id=$USER_ID&tg_file_id=$TEST_REPLACE_FILE_ID&file_type=photo" \
+  -H "Content-Type: application/json" \
+  -d '{"tags": ["old_tag1", "old_tag2"]}')
+
+if [ "$HTTP_CODE" != "201" ]; then
+    echo -e "${RED}Ошибка: Не удалось загрузить изображение для теста замены тегов${NC}"
+    exit 1
+fi
+
+# Заменяем теги
+HTTP_CODE=$(curl -s -w "%{http_code}" -o /tmp/replace_response.txt -X PUT \
+  "$SERVER_URL/image/tags?user_id=$USER_ID&tg_file_id=$TEST_REPLACE_FILE_ID" \
+  -H "Content-Type: application/json" \
+  -d '{"tags": ["new_tag1", "new_tag2", "new_tag3"]}')
+
+if [ "$HTTP_CODE" != "200" ]; then
+    echo -e "${RED}Ошибка: Не удалось заменить теги${NC}"
+    cat /tmp/replace_response.txt
+    exit 1
+fi
+
+# Проверяем, что теги заменились
+GET_REPLACED=$(curl -s -X GET "$SERVER_URL/user/images?user_id=$USER_ID")
+
+if echo "$GET_REPLACED" | grep -q "\"$TEST_REPLACE_FILE_ID\""; then
+    if echo "$GET_REPLACED" | grep -q '"new_tag1"' && echo "$GET_REPLACED" | grep -q '"new_tag2"' && echo "$GET_REPLACED" | grep -q '"new_tag3"'; then
+        if ! echo "$GET_REPLACED" | grep -q '"old_tag1"' && ! echo "$GET_REPLACED" | grep -q '"old_tag2"'; then
+            echo -e "${GREEN}✓ Теги успешно заменены${NC}"
+        else
+            echo -e "${RED}Ошибка: Старые теги не были удалены${NC}"
+            exit 1
+        fi
+    else
+        echo -e "${RED}Ошибка: Новые теги не найдены${NC}"
+        exit 1
+    fi
+else
+    echo -e "${RED}Ошибка: Изображение не найдено после замены тегов${NC}"
+    exit 1
+fi
+
+echo -e "${YELLOW}9. Тест защиты публичных изображений от замены тегов...${NC}"
+
+# Пытаемся заменить теги у публичного изображения (должно быть запрещено)
+REPLACE_PUBLIC=$(curl -s -X PUT "$SERVER_URL/image/tags?user_id=0&tg_file_id=$PUBLIC_FILE_ID" \
+  -H "Content-Type: application/json" \
+  -d '{"tags": ["should_not_work"]}')
+
+if echo "$REPLACE_PUBLIC" | grep -q "cannot replace tags for default user"; then
+    echo -e "${GREEN}✓ Защита публичных изображений работает${NC}"
+else
+    echo -e "${RED}Ошибка: Удалось заменить теги публичного изображения${NC}"
+    echo "Ответ: $REPLACE_PUBLIC"
+    exit 1
+fi
+
+echo -e "${YELLOW}10. Тест удаления конкретной картинки...${NC}"
+
+# Загружаем изображение для удаления
+DELETE_FILE_ID="test_delete_file_id_88888"
+HTTP_CODE=$(curl -s -w "%{http_code}" -o /dev/null -X POST \
+  "$SERVER_URL/upload?user_id=$USER_ID&tg_file_id=$DELETE_FILE_ID&file_type=video" \
+  -H "Content-Type: application/json" \
+  -d '{"tags": ["to_delete"]}')
+
+if [ "$HTTP_CODE" != "201" ]; then
+    echo -e "${RED}Ошибка: Не удалось загрузить изображение для удаления${NC}"
+    exit 1
+fi
+
+# Проверяем что изображение есть
+GET_BEFORE_DELETE=$(curl -s -X GET "$SERVER_URL/user/images?user_id=$USER_ID")
+if ! echo "$GET_BEFORE_DELETE" | grep -q "\"$DELETE_FILE_ID\""; then
+    echo -e "${RED}Ошибка: Изображение не найдено перед удалением${NC}"
+    exit 1
+fi
+
+# Удаляем изображение
+HTTP_CODE=$(curl -s -w "%{http_code}" -o /tmp/delete_response.txt -X DELETE \
+  "$SERVER_URL/image/delete?user_id=$USER_ID&tg_file_id=$DELETE_FILE_ID")
+
+if [ "$HTTP_CODE" != "200" ]; then
+    echo -e "${RED}Ошибка: Не удалось удалить изображение${NC}"
+    cat /tmp/delete_response.txt
+    exit 1
+fi
+
+# Проверяем что изображение удалено
+GET_AFTER_DELETE=$(curl -s -X GET "$SERVER_URL/user/images?user_id=$USER_ID")
+if echo "$GET_AFTER_DELETE" | grep -q "\"$DELETE_FILE_ID\""; then
+    echo -e "${RED}Ошибка: Изображение все еще существует после удаления${NC}"
+    exit 1
+fi
+
+echo -e "${GREEN}✓ Удаление конкретной картинки работает корректно${NC}"
+
+echo -e "${YELLOW}11. Тест удаления всех картинок пользователя...${NC}"
+
+# Создаем тестового пользователя с несколькими изображениями
+TEST_DELETE_USER=777777777
+curl -s -X POST "$SERVER_URL/upload?user_id=$TEST_DELETE_USER&tg_file_id=file_1&file_type=photo" \
+  -H "Content-Type: application/json" -d '{"tags": ["tag1"]}' > /dev/null
+
+curl -s -X POST "$SERVER_URL/upload?user_id=$TEST_DELETE_USER&tg_file_id=file_2&file_type=photo" \
+  -H "Content-Type: application/json" -d '{"tags": ["tag2"]}' > /dev/null
+
+curl -s -X POST "$SERVER_URL/upload?user_id=$TEST_DELETE_USER&tg_file_id=file_3&file_type=photo" \
+  -H "Content-Type: application/json" -d '{"tags": ["tag3"]}' > /dev/null
+
+# Проверяем что у пользователя есть изображения
+GET_BEFORE_DELETE_ALL=$(curl -s -X GET "$SERVER_URL/user/images?user_id=$TEST_DELETE_USER")
+IMAGE_COUNT=$(echo "$GET_BEFORE_DELETE_ALL" | grep -o "tg_file_id" | wc -l)
+
+if [ "$IMAGE_COUNT" -lt 3 ]; then
+    echo -e "${RED}Ошибка: Недостаточно изображений перед удалением (найдено: $IMAGE_COUNT)${NC}"
+    exit 1
+fi
+
+# Удаляем все изображения пользователя
+HTTP_CODE=$(curl -s -w "%{http_code}" -o /tmp/delete_all_response.txt -X DELETE \
+  "$SERVER_URL/user/images/delete?user_id=$TEST_DELETE_USER")
+
+if [ "$HTTP_CODE" != "200" ]; then
+    echo -e "${RED}Ошибка: Не удалось удалить все изображения пользователя${NC}"
+    cat /tmp/delete_all_response.txt
+    exit 1
+fi
+
+# Проверяем что у пользователя нет изображений
+GET_AFTER_DELETE_ALL=$(curl -s -X GET "$SERVER_URL/user/images?user_id=$TEST_DELETE_USER")
+if echo "$GET_AFTER_DELETE_ALL" | grep -q '"images":\[\]' || echo "$GET_AFTER_DELETE_ALL" | grep -q '"images": \[\]'; then
+    echo -e "${GREEN}✓ Удаление всех картинок пользователя работает корректно${NC}"
+else
+    echo -e "${RED}Ошибка: У пользователя остались изображения после удаления${NC}"
+    echo "Ответ: $GET_AFTER_DELETE_ALL"
+    exit 1
+fi
+
+echo -e "${YELLOW}12. Тест генерации описания...${NC}"
+
+# Проверяем генерацию описания
+GEN_DESC=$(curl -s -X POST "$SERVER_URL/image/generate-description" \
+  -F "image=@test/test_image.jpg")
+
+if echo "$GEN_DESC" | grep -q "метод пока не реализован"; then
+    echo -e "${GREEN}✓ Генерация описания возвращает корректный ответ${NC}"
+else
+    echo -e "${RED}Ошибка: Генерация описания вернула неожиданный ответ${NC}"
+    echo "Ответ: $GEN_DESC"
+    exit 1
+fi
+
 echo -e "${GREEN}=== Все тесты пройдены успешно ===${NC}"
 
 # Очистка
-rm -f /tmp/upload_response.txt
+rm -f /tmp/upload_response.txt /tmp/replace_response.txt /tmp/delete_response.txt /tmp/delete_all_response.txt
 exit 0

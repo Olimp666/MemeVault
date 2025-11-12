@@ -2,7 +2,24 @@
 
 Сервис для хранения метаданных медиафайлов Telegram (изображения, видео, гифки)
 
-###  Запуск 
+## Содержание
+
+### API Endpoints
+- [Загрузка метаданных медиафайла](#загрузка-метаданных-медиафайла) - `POST /upload`
+- [Получение медиафайлов по тегам](#получение-медиафайлов-по-тегам) - `POST /images`
+- [Получение всех медиафайлов пользователя](#получение-всех-медиафайлов-пользователя) - `GET /user/images`
+- [Удаление конкретной картинки](#удаление-конкретной-картинки) - `DELETE /image/delete`
+- [Удаление всех картинок пользователя](#удаление-всех-картинок-пользователя) - `DELETE /user/images/delete`
+- [Замена тегов картинки](#замена-тегов-картинки) - `PUT /image/tags`
+- [Генерация описания к картинке](#генерация-описания-к-картинке) - `POST /image/generate-description`
+
+### Дополнительная информация
+- [Типы файлов](#типы-файлов)
+- [Запуск сервиса](#запуск)
+
+---
+
+## Запуск 
 
 Из директории deployments: ```docker compose up --build```  
 Сайт будет запущен на http://localhost/
@@ -13,7 +30,9 @@ docker compose down
 docker volume rm deployments_pg_data
 ```
 
-### API Endpoints
+---
+
+## API Endpoints
 
 #### Загрузка метаданных медиафайла
 
@@ -130,22 +149,93 @@ curl -X GET "http://localhost/user/images?user_id=123456789"
 - Новые теги добавляются к существующей записи
 - Старые теги сохраняются
 
+#### Удаление конкретной картинки
+
+Удаляет конкретную картинку пользователя по tg_file_id.
+
+```bash
+curl -X DELETE "http://localhost/image/delete?user_id=123456789&tg_file_id=AgACAgIAAxkBAAIC..."
+```
+
+Ответ (HTTP 200):
+```
+Image deleted successfully
+```
+
+**Query параметры:**
+- `user_id` (int64) - ID пользователя Telegram
+- `tg_file_id` (string) - File ID из Telegram API
+
+#### Удаление всех картинок пользователя
+
+Удаляет все картинки конкретного пользователя.
+
+```bash
+curl -X DELETE "http://localhost/user/images/delete?user_id=123456789"
+```
+
+Ответ (HTTP 200):
+```
+All user images deleted successfully
+```
+
+**Query параметры:**
+- `user_id` (int64) - ID пользователя Telegram
+
+#### Замена тегов картинки
+
+Заменяет все теги конкретной картинки пользователя на новый набор тегов.
+
+**Важно:** Нельзя заменять теги для публичных изображений (user_id = 0).
+
+```bash
+curl -X PUT "http://localhost/image/tags?user_id=123456789&tg_file_id=AgACAgIAAxkBAAIC..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "tags": ["новый_тег1", "новый_тег2"]
+  }'
+```
+
+Ответ (HTTP 200):
+```
+Tags replaced successfully
+```
+
+**Query параметры:**
+- `user_id` (int64) - ID пользователя Telegram (не должен быть 0)
+- `tg_file_id` (string) - File ID из Telegram API
+
+**Body (JSON):**
+- `tags` ([]string) - Новый массив тегов (минимум 1 тег)
+
+**Особенности:**
+- Все старые теги удаляются и заменяются новыми
+- Нельзя использовать для публичных изображений (user_id = 0)
+
+#### Генерация описания к картинке
+
+Генерирует текстовое описание для загруженной картинки.
+
+**Примечание:** Метод пока не реализован и возвращает заглушку.
+
+```bash
+curl -X POST "http://localhost/image/generate-description" \
+  -F "image=@/path/to/image.jpg"
+```
+
+Ответ (HTTP 200):
+```json
+{
+  "description": "метод пока не реализован"
+}
+```
+
+**Form Data:**
+- `image` (file) - Файл изображения (максимум 10MB)
+
 ### Типы файлов
 
 Поддерживаются следующие типы медиафайлов:
 - `photo` - фотография
 - `video` - видео
 - `gif` - анимация/гифка
-
-### Структура базы данных
-
-**Таблица images:**
-- `tg_file_id` (VARCHAR(255), PRIMARY KEY) - Telegram File ID
-- `user_id` (BIGINT) - ID пользователя
-- `file_type` (VARCHAR(50)) - Тип файла (photo, video, gif)
-- `created_at` (TIMESTAMP) - Дата создания
-
-**Таблица tags:**
-- `tg_file_id` (VARCHAR(255)) - Ссылка на медиафайл
-- `name` (VARCHAR(255)) - Название тега
-- PRIMARY KEY (`tg_file_id`, `name`)
