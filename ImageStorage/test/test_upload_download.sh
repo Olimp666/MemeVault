@@ -77,6 +77,20 @@ fi
 
 echo -e "${GREEN}✓ File Type совпадает${NC}"
 
+# Проверка наличия тегов в ответе exact_match
+if ! echo "$GET_RESPONSE" | grep -q '"tags"'; then
+    echo -e "${RED}Ошибка: В ответе exact_match отсутствуют теги${NC}"
+    exit 1
+fi
+
+if echo "$GET_RESPONSE" | grep -q '"meme"' && echo "$GET_RESPONSE" | grep -q '"funny"' && echo "$GET_RESPONSE" | grep -q '"test"'; then
+    echo -e "${GREEN}✓ Все теги присутствуют в exact_match${NC}"
+else
+    echo -e "${RED}Ошибка: Не все теги найдены в exact_match${NC}"
+    echo "Получили: $GET_RESPONSE"
+    exit 1
+fi
+
 echo -e "${YELLOW}3. Проверка фильтрации по тегам (частичное совпадение)...${NC}"
 
 GET_PARTIAL=$(curl -s -X POST "$SERVER_URL/images?user_id=$USER_ID" \
