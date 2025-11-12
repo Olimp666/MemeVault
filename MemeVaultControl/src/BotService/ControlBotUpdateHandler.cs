@@ -113,7 +113,12 @@ public class ControlBotUpdateHandler : IUpdateHandler
     {
         var text = message.Text ?? message.Caption;
 
-        if (text is null)
+        var hasAttachment = 
+            message.Photo != null 
+            || message.Video != null 
+            || message.Animation != null;
+        
+        if (!hasAttachment && text is null)
         {
             await botClient.SendMessage(
                 message.Chat.Id,
@@ -123,10 +128,11 @@ public class ControlBotUpdateHandler : IUpdateHandler
             return null;
         }
 
+        text ??= "";
         var cmd = text.Split(' ').FirstOrDefault()?.ToLower();
         var args = text.Split(' ').Skip(1);
-
-        if (cmd is null || !cmd.StartsWith('/'))
+        
+        if (!hasAttachment && (cmd is null || !cmd.StartsWith('/')))
         {
             await botClient.SendMessage(
                 message.Chat.Id,
@@ -138,9 +144,11 @@ public class ControlBotUpdateHandler : IUpdateHandler
 
         Command? command = cmd switch
         {
-            "/start" when args.FirstOrDefault() == "upload" => new AddCommand(botClient, ct),
+            _ when hasAttachment => new AddCommand(botClient, ct),
+            "/start" when args.FirstOrDefault() == "upload" => new AddHelpCommand(botClient, ct),
             "/start" or "/help" => new StartCommand(botClient, ct),
-            "/add" => new AddCommand(botClient, ct),
+            "/add" when hasAttachment => new AddCommand(botClient, ct),
+            "/add" => new AddHelpCommand(botClient, ct),
             "/list" => new ListCommand(botClient, ct),
             "/cancel" => new CancelCommand(botClient, ct),
             _ => null

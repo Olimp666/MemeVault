@@ -7,7 +7,7 @@ public class StartCommand(ITelegramBotClient bot, CancellationToken ct) : Comman
 {
     public override async Task Next(Message message)
     {
-        await Reply(message, "Hi!\nTo add a meme, use /add\n");
+        await Reply(message, "Привет!\nЧтобы добавить мем, приложите фотографию/видео/гифку вместе с тегами сообщением боту\n");
         Finished = true;
     }
 }
