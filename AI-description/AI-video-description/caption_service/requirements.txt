@@ -1,0 +1,6 @@
+opencv-python
+transformers
+torch
+flask
+Pillow
+deep-translator
