@@ -6,5 +6,6 @@ namespace MemeVaultControl.Model;
 [JsonObject]
 public class ListResponse
 {
-    [JsonProperty("tg_file_ids")] public required List<string> Images { get; set; }
+    [JsonProperty("exact_match")] public required List<MediaEntry> ExactMatch { get; set; }
+    [JsonProperty("partial_match")] public required List<MediaEntry> PartialMatch { get; set; }
 }

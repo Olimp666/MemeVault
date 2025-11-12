@@ -3,12 +3,14 @@ using MemeVaultControl.Client;
 using MemeVaultControl.Model;
 using Telegram.Bot;
 using Telegram.Bot.Types;
+using Telegram.Bot.Types.Enums;
 
 namespace MemeVaultControl.Commands;
 
 public class AddCommand(ITelegramBotClient bot, CancellationToken ct) : CancellableCommand(bot, ct)
 {
     private string? _media;
+    private MediaType? _mediaType;
     private string[]? _tags;
     private readonly BackendClient _client = new();
 
@@ -17,10 +19,12 @@ public class AddCommand(ITelegramBotClient bot, CancellationToken ct) : Cancella
         await base.Next(message);
         if (Finished) return;
 
-        await TrySetMedia(message);
+        if (message.From?.Id is null) return;
+
+        TrySetMedia(message);
         TrySetTags(message);
 
-        if (_media is null)
+        if (_media is null || _mediaType is null)
         {
             await Reply(message, "Приложите фотографию");
             return;
@@ -33,8 +37,7 @@ public class AddCommand(ITelegramBotClient bot, CancellationToken ct) : Cancella
         }
 
         Finished = true;
-        Debug.Assert(message.From?.Id is not null);
-        var success = await SendRequest(message.From!.Id, _media, _tags);
+        var success = await SendRequest(message.From!.Id, _media, _mediaType.Value, _tags);
 
         if (!success)
         {
@@ -45,24 +48,27 @@ public class AddCommand(ITelegramBotClient bot, CancellationToken ct) : Cancella
         await SignalSuccess(message, _tags);
     }
 
-    private async Task TrySetMedia(Message message)
+    private void TrySetMedia(Message message)
     {
-        var photos = message.Photo;
+        if (_media is not null) return;
 
-        if (photos is null)
-            return;
+        _mediaType = message.Type switch
+        {
+            MessageType.Photo => MediaType.Photo,
+            MessageType.Video => MediaType.Video,
+            MessageType.Animation => MediaType.Gif,
+            _ => null
+        };
 
-        if (photos.Length == 0)
-            return;
-
-        // TODO: Pick desirable quality
-        var photo = photos.Last();
-
-        _media = photo.FileId;
+        _media = message.Photo?.LastOrDefault()?.FileId
+                 ?? message.Video?.FileId
+                 ?? message.Animation?.FileId;
     }
 
     private void TrySetTags(Message message)
     {
+        if (_tags is not null) return;
+
         var text = message.Text ?? message.Caption;
         if (text is null)
             return;
@@ -84,9 +90,9 @@ public class AddCommand(ITelegramBotClient bot, CancellationToken ct) : Cancella
         await Reply(message, $"Мем успешно сохранен с тегами [{formattedTags}]");
     }
 
-    private async Task<bool> SendRequest(long userId, string media, string[] tags)
+    private async Task<bool> SendRequest(long userId, string media, MediaType mediaType, string[] tags)
     {
-        var form = new UploadRequest(userId, media, tags);
+        var form = new UploadRequest(userId, media, mediaType, tags);
         try
         {
             await _client.UploadImage(form);

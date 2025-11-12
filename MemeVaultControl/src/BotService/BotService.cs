@@ -12,7 +12,7 @@ public class BotService(ITelegramBotClient bot)
     {
         ReceiverOptions receiverOptions = new()
         {
-            AllowedUpdates = [UpdateType.Message] // receive all update types except ChatMember related updates
+            AllowedUpdates = [UpdateType.Message, UpdateType.InlineQuery, UpdateType.ChosenInlineResult]
         };
 
         bot.StartReceiving(
