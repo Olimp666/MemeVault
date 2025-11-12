@@ -103,7 +103,7 @@ func (s *Repository) ImageByUserAndFileID(userID int64, tgFileID string) (*model
 	return &image, nil
 }
 
-func (s *Repository) ImagesByTags(tags []string, userID int64) ([]*models.Image, error) {
+func (s *Repository) ImagesByTags(tags []string, userID int64) ([]*models.ImageWithTags, error) {
 	if len(tags) == 0 {
 		return nil, fmt.Errorf("at least one tag is required")
 	}
@@ -123,10 +123,25 @@ func (s *Repository) ImagesByTags(tags []string, userID int64) ([]*models.Image,
 		return nil, fmt.Errorf("can't get images by tags: %w", err)
 	}
 
-	return images, nil
+	result := make([]*models.ImageWithTags, 0, len(images))
+	for _, img := range images {
+		tagsQuery := `SELECT name FROM tags WHERE image_id = $1 ORDER BY name;`
+		var imgTags []string
+		err := s.db.Select(&imgTags, tagsQuery, img.ID)
+		if err != nil {
+			return nil, fmt.Errorf("can't get tags for image %d: %w", img.ID, err)
+		}
+
+		result = append(result, &models.ImageWithTags{
+			Image: *img,
+			Tags:  imgTags,
+		})
+	}
+
+	return result, nil
 }
 
-func (s *Repository) ImagesBySubsetOfTags(tags []string, userID int64) ([]*models.Image, error) {
+func (s *Repository) ImagesBySubsetOfTags(tags []string, userID int64) ([]*models.ImageWithTags, error) {
 	if len(tags) == 0 {
 		return nil, fmt.Errorf("at least one tag is required")
 	}
@@ -146,7 +161,22 @@ func (s *Repository) ImagesBySubsetOfTags(tags []string, userID int64) ([]*model
 		return nil, fmt.Errorf("can't get images by subset of tags: %w", err)
 	}
 
-	return images, nil
+	result := make([]*models.ImageWithTags, 0, len(images))
+	for _, img := range images {
+		tagsQuery := `SELECT name FROM tags WHERE image_id = $1 ORDER BY name;`
+		var imgTags []string
+		err := s.db.Select(&imgTags, tagsQuery, img.ID)
+		if err != nil {
+			return nil, fmt.Errorf("can't get tags for image %d: %w", img.ID, err)
+		}
+
+		result = append(result, &models.ImageWithTags{
+			Image: *img,
+			Tags:  imgTags,
+		})
+	}
+
+	return result, nil
 }
 
 func (s *Repository) ImagesByUser(userID int64) ([]*models.ImageWithTags, error) {

@@ -10,8 +10,8 @@ type ImageRepository interface {
 	Add(tgFileID string, userID int64, fileType string, tags []string) (int64, error)
 	AddTags(imageID int64, tags []string) error
 	ImageByUserAndFileID(userID int64, tgFileID string) (*models.Image, error)
-	ImagesByTags(tags []string, userID int64) ([]*models.Image, error)
-	ImagesBySubsetOfTags(tags []string, userID int64) ([]*models.Image, error)
+	ImagesByTags(tags []string, userID int64) ([]*models.ImageWithTags, error)
+	ImagesBySubsetOfTags(tags []string, userID int64) ([]*models.ImageWithTags, error)
 	ImagesByUser(userID int64) ([]*models.ImageWithTags, error)
 }
 
@@ -59,7 +59,7 @@ func (s *Service) UploadImage(tgFileID string, userID int64, fileType string, ta
 	return nil
 }
 
-func (s *Service) ImagesByTags(tags []string, userID int64) (exactMatch []*models.Image, partialMatch []*models.Image, err error) {
+func (s *Service) ImagesByTags(tags []string, userID int64) (exactMatch []*models.ImageWithTags, partialMatch []*models.ImageWithTags, err error) {
 	if len(tags) == 0 {
 		return nil, nil, fmt.Errorf("at least one tag is required")
 	}

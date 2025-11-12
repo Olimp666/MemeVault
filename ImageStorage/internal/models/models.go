@@ -42,6 +42,6 @@ type ImageInfoWithTags struct {
 }
 
 type GetImagesResponse struct {
-	ExactMatch   []ImageInfo `json:"exact_match"`
-	PartialMatch []ImageInfo `json:"partial_match"`
+	ExactMatch   []ImageInfoWithTags `json:"exact_match"`
+	PartialMatch []ImageInfoWithTags `json:"partial_match"`
 }

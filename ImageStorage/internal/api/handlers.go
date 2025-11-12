@@ -11,7 +11,7 @@ import (
 
 type ImageService interface {
 	UploadImage(tgFileID string, userID int64, fileType string, tags []string) error
-	ImagesByTags(tags []string, userID int64) (exactMatch []*models.Image, partialMatch []*models.Image, err error)
+	ImagesByTags(tags []string, userID int64) (exactMatch []*models.ImageWithTags, partialMatch []*models.ImageWithTags, err error)
 	ImagesByUser(userID int64) ([]*models.ImageWithTags, error)
 }
 
@@ -113,21 +113,23 @@ func (h *Handler) ImagesByTags(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response := models.GetImagesResponse{
-		ExactMatch:   make([]models.ImageInfo, 0, len(exactMatch)),
-		PartialMatch: make([]models.ImageInfo, 0, len(partialMatch)),
+		ExactMatch:   make([]models.ImageInfoWithTags, 0, len(exactMatch)),
+		PartialMatch: make([]models.ImageInfoWithTags, 0, len(partialMatch)),
 	}
 
 	for _, img := range exactMatch {
-		response.ExactMatch = append(response.ExactMatch, models.ImageInfo{
+		response.ExactMatch = append(response.ExactMatch, models.ImageInfoWithTags{
 			TgFileID: img.TgFileID,
 			FileType: img.FileType,
+			Tags:     img.Tags,
 		})
 	}
 
 	for _, img := range partialMatch {
-		response.PartialMatch = append(response.PartialMatch, models.ImageInfo{
+		response.PartialMatch = append(response.PartialMatch, models.ImageInfoWithTags{
 			TgFileID: img.TgFileID,
 			FileType: img.FileType,
+			Tags:     img.Tags,
 		})
 	}
 
