@@ -1,3 +1,4 @@
+using MemeVaultControl.Client;
 using MemeVaultControl.Commands;
 using Telegram.Bot;
 using Telegram.Bot.Exceptions;
@@ -13,6 +14,7 @@ namespace MemeVaultControl.BotService;
 public class ControlBotUpdateHandler : IUpdateHandler
 {
     private readonly Dictionary<long, Command> _commands = [];
+    private readonly BackendClient _client = new();
 
     public Task HandleUpdateAsync(ITelegramBotClient botClient, Update update, CancellationToken ct)
     {
@@ -20,60 +22,63 @@ public class ControlBotUpdateHandler : IUpdateHandler
         {
             { Message: { } msg } => HandleMessage(botClient, msg, ct),
             { InlineQuery: { } query } => HandleInlineQuery(botClient, query, ct),
+            { ChosenInlineResult: { } result } => HandleChosenInlineResult(botClient, result, ct),
             _ => Task.CompletedTask
         };
+    }
+
+    async Task HandleChosenInlineResult(ITelegramBotClient bot, ChosenInlineResult chosenInlineResult,
+        CancellationToken ct)
+    {
+        Console.WriteLine(
+            $"Chosen result #{chosenInlineResult.ResultId} from a query {chosenInlineResult.Query}");
     }
 
     async Task HandleInlineQuery(ITelegramBotClient botClient, InlineQuery query, CancellationToken ct)
     {
         var emptyQuery = query.Query.Length == 0;
         var results = new List<InlineQueryResult>();
-        List<MediaItem> memeList;
-
-        var client = new RestClient(ConfigHelper.Endpoint);
-
+        List<MediaEntry> memeList;
 
         if (!emptyQuery)
         {
-            var request = new RestRequest("/images", Method.Post);
-            request.AddQueryParameter("user_id", query.From.Id);
-            var parsedTags = query.Query.Split().ToList();
-            request.AddJsonBody(new { tags = parsedTags });
-            var response = await client.ExecuteAsync<MatchResponse>(request);
-            memeList = response.Data?.ExactMatch!;
+            var request = new TagSearchRequest(query.From.Id, query.Query.Split().ToList());
+            memeList = (await _client.SearchByTags(request))!.ExactMatch;
         }
         else
         {
-            var request = new RestRequest("/user/images");
-            request.AddQueryParameter("user_id", query.From.Id);
-            var response = await client.ExecuteAsync<MediaList>(request);
-            memeList = response.Data!.Images;
+            var request = new ListUserMediaRequest(query.From.Id);
+            memeList = (await _client.ListUserMedia(request))!.Images;
         }
 
         var cnt = 0;
         foreach (var item in memeList!)
         {
             InlineQueryResult result;
-            switch (item.Type)
+            switch (item.MediaType)
             {
-                case FileType.Photo:
+                case MediaType.Photo:
                     result = new InlineQueryResultCachedPhoto(
                         id: cnt.ToString(),
                         photoFileId: item.FileId
                     );
                     break;
-                case FileType.Gif:
+                case MediaType.Gif:
                     result = new InlineQueryResultCachedGif(
                         id: cnt.ToString(),
                         gifFileId: item.FileId
                     );
                     break;
-                case FileType.Video:
-                    result = new InlineQueryResultCachedVideo(
+                case MediaType.Video:
+                    var vid = new InlineQueryResultCachedVideo(
                         id: cnt.ToString(),
                         videoFileId: item.FileId,
-                        title: "⠀" //TODO figure out video titles
+                        title: string.Join(" ", item.Tags) //TODO figure out video titles
                     );
+                    vid.Caption = "Hi";
+                    vid.Description = " ";
+                    vid.ShowCaptionAboveMedia = true;
+                    result = vid;
                     break;
                 default:
                     return;
@@ -113,11 +118,11 @@ public class ControlBotUpdateHandler : IUpdateHandler
     {
         var text = message.Text ?? message.Caption;
 
-        var hasAttachment = 
-            message.Photo != null 
-            || message.Video != null 
+        var hasAttachment =
+            message.Photo != null
+            || message.Video != null
             || message.Animation != null;
-        
+
         if (!hasAttachment && text is null)
         {
             await botClient.SendMessage(
@@ -131,7 +136,7 @@ public class ControlBotUpdateHandler : IUpdateHandler
         text ??= "";
         var cmd = text.Split(' ').FirstOrDefault()?.ToLower();
         var args = text.Split(' ').Skip(1);
-        
+
         if (!hasAttachment && (cmd is null || !cmd.StartsWith('/')))
         {
             await botClient.SendMessage(

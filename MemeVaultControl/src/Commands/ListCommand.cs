@@ -84,12 +84,12 @@ public class ListCommand(ITelegramBotClient bot, CancellationToken ct) : Cancell
         _tags = parts[startIndex..];
     }
 
-    private async Task<ListResponse?> GetImages(long userId, IEnumerable<string> tags)
+    private async Task<TagSearchResponse?> GetImages(long userId, IEnumerable<string> tags)
     {
         try
         {
-            var request = new ListRequest(userId, tags.ToList());
-            var response = await _client.GetList(request);
+            var request = new TagSearchRequest(userId, tags.ToList());
+            var response = await _client.SearchByTags(request);
             return response;
         }
         catch (Exception ex)

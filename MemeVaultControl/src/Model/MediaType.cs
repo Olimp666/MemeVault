@@ -1,13 +1,12 @@
 using System.Runtime.Serialization;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Converters;
+using System.Text.Json.Serialization;
 
 namespace MemeVaultControl.Model;
 
-[JsonConverter(typeof(StringEnumConverter))]
+[JsonConverter(typeof(JsonStringEnumConverter))]
 public enum MediaType
 {
-    [EnumMember(Value = "photo")] Photo,
-    [EnumMember(Value = "video")] Video,
-    [EnumMember(Value = "gif")] Gif
+    Photo,
+    Video,
+    Gif
 }
