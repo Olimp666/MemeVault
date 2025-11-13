@@ -1,0 +1,20 @@
+services:
+  ai_video_text_extraction:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ai_video_text_extraction
+    ports:
+      - "5003:5000"
+    restart: unless-stopped
+    environment:
+      - FLASK_APP=app.py
+      - FLASK_RUN_HOST=0.0.0.0
+      - PYTHONUNBUFFERED=1
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - capabilities: [gpu]
+    volumes:
+      - .:/app
