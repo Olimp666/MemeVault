@@ -89,7 +89,6 @@ public class ControlBotUpdateHandler : IUpdateHandler
                         videoFileId: item.FileId,
                         title: string.Join(" ", item.Tags) //TODO figure out video titles
                     );
-                    vid.Caption = "Hi";
                     vid.Description = " ";
                     vid.ShowCaptionAboveMedia = true;
                     result = vid;
