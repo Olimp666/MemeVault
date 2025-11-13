@@ -10,7 +10,9 @@ public static class Program
         var bot = new TelegramBotClient(ConfigHelper.BotToken);
         var botService = new BotService.BotService(bot);
         await botService.Run();
-        Console.WriteLine("Bot is running.\nPress any key to exit...");
-        Console.ReadKey();
+        Console.WriteLine("Bot is running. Press Ctrl+C to exit.");
+        
+        // Ожидание бесконечно, пока не будет сигнала остановки
+        await Task.Delay(Timeout.Infinite);
     }
 }
