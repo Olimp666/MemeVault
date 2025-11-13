@@ -50,7 +50,6 @@ func main() {
 		panic(err)
 	}
 
-	// Парсим JSON
 	var result struct {
 		Caption string `json:"caption"`
 	}
@@ -60,13 +59,9 @@ func main() {
 
 	fmt.Println("Описание:", result.Caption)
 
-	// =============================
-	// 🔹 Преобразуем описание в список тегов
-	// =============================
 	tags := captionToTags(result.Caption)
 	fmt.Println("Теги:", tags)
 
-	// Сохраняем в файл (JSON-массив)
 	tagsJSON, _ := json.Marshal(tags)
 	if err := os.WriteFile(outputPath, tagsJSON, 0o644); err != nil {
 		panic(err)
@@ -74,19 +69,14 @@ func main() {
 	fmt.Println("Теги записаны в", outputPath)
 }
 
-// captionToTags превращает строку описания в массив тегов
 func captionToTags(caption string) []string {
-	// 1. Приводим к нижнему регистру
 	caption = strings.ToLower(caption)
 
-	// 2. Убираем пунктуацию, сохраняя русские буквы и цифры
 	re := regexp.MustCompile(`[^\p{L}\p{N}\s]`)
 	clean := re.ReplaceAllString(caption, "")
 
-	// 3. Разбиваем на слова
 	words := strings.Fields(clean)
 
-	// 4. Для MVP — уникальные слова
 	tagMap := make(map[string]struct{})
 	for _, w := range words {
 		tagMap[w] = struct{}{}

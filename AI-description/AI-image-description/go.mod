@@ -1,3 +1,3 @@
-module AI-signing-images_2.0
+module AI-image-description
 
 go 1.23.0

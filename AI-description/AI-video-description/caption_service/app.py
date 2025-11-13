@@ -4,12 +4,15 @@ import cv2
 from transformers import VisionEncoderDecoderModel, ViTImageProcessor, AutoTokenizer
 from PIL import Image
 from deep_translator import GoogleTranslator
+import torch
 
 app = Flask(__name__)
 
-# Настройка модели
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+print("Используется устройство:", device)
+
 model_name = "nlpconnect/vit-gpt2-image-captioning"
-model = VisionEncoderDecoderModel.from_pretrained(model_name)
+model = VisionEncoderDecoderModel.from_pretrained(model_name).to(device)
 feature_extractor = ViTImageProcessor.from_pretrained(model_name)
 tokenizer = AutoTokenizer.from_pretrained(model_name)
 
@@ -43,13 +46,13 @@ def caption_video():
     captions = []
     for img in frames:
         pixel_values = feature_extractor(images=img, return_tensors="pt").pixel_values
+        pixel_values = pixel_values.to(device)  
         output_ids = model.generate(pixel_values, max_length=50, num_beams=4)
         caption = tokenizer.decode(output_ids[0], skip_special_tokens=True)
         captions.append(caption)
 
     full_caption_en = " ".join(captions)
 
-    # Перевод на русский
     try:
         full_caption_ru = GoogleTranslator(source='en', target='ru').translate(full_caption_en)
     except Exception as e:
