@@ -27,11 +27,25 @@ public class ControlBotUpdateHandler : IUpdateHandler
         };
     }
 
-    async Task HandleChosenInlineResult(ITelegramBotClient bot, ChosenInlineResult chosenInlineResult,
+    async Task HandleChosenInlineResult(ITelegramBotClient bot, ChosenInlineResult result,
         CancellationToken ct)
     {
-        Console.WriteLine(
-            $"Chosen result #{chosenInlineResult.ResultId} from a query {chosenInlineResult.Query}");
+        var emptyQuery = result.Query.Length == 0;
+        List<MediaEntry> memeList;
+        if (!emptyQuery)
+        {
+            var request = new TagSearchRequest(result.From.Id, result.Query.Split().ToList());
+            memeList = (await _client.SearchByTags(request))!.ExactMatch;
+        }
+        else
+        {
+            var request = new ListUserMediaRequest(result.From.Id);
+            memeList = (await _client.ListUserMedia(request))!.Images;
+        }
+
+        var msgId = Convert.ToInt32(result.ResultId);
+        await _client.IncreaseCounter(new IncreaseCounterRequest(result.From.Id, memeList[msgId].FileId));
+        Console.WriteLine($"Incremented counter for image: [{memeList[msgId].FileId}]");
     }
 
     async Task HandleInlineQuery(ITelegramBotClient botClient, InlineQuery query, CancellationToken ct)

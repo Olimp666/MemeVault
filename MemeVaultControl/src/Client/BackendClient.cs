@@ -9,6 +9,16 @@ public class BackendClient
 {
     private readonly RestClient _client = new(ConfigHelper.Endpoint);
 
+    public async Task IncreaseCounter(IncreaseCounterRequest body)
+    {
+        var request = new RestRequest("/image/increment-usage", Method.Post);
+        request.AddQueryParameter("user_id", body.UserId);
+        request.AddQueryParameter("tg_file_id", body.Image);
+        var response = await _client.ExecuteAsync(request);
+        
+        Console.WriteLine($"Executed /increment-usage with status code {response.StatusCode}");
+    }
+    
     public async Task UploadImage(UploadRequest body)
     {
         var request = new RestRequest("/upload", Method.Post);
@@ -25,6 +35,7 @@ public class BackendClient
     {
         var request = new RestRequest("/images", Method.Post);
         request.AddQueryParameter("user_id", body.UserId);
+        request.AddQueryParameter("sort_by", "usage_count");
         var parsedTags = body.Tags;
         request.AddJsonBody(new { tags = parsedTags });
         var response = await _client.ExecuteAsync<TagSearchResponse>(request);
@@ -35,6 +46,7 @@ public class BackendClient
     {
         var request = new RestRequest("/user/images");
         request.AddQueryParameter("user_id", body.UserId);
+        request.AddQueryParameter("sort_by", "usage_count");
         var response = await _client.ExecuteAsync<ListUserMediaResponse>(request);
         return response.Data;
     }
