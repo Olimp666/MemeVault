@@ -11,13 +11,14 @@ import (
 
 type ImageService interface {
 	UploadImage(tgFileID string, userID int64, fileType string, tags []string) error
-	ImagesByTags(tags []string, userID int64) (exactMatch []*models.ImageWithTags, partialMatch []*models.ImageWithTags, err error)
+	ImagesByTags(tags []string, userID int64, sortBy string) (exactMatch []*models.ImageWithTags, partialMatch []*models.ImageWithTags, err error)
 	ImagesByUser(userID int64, sortBy string) ([]*models.ImageWithTags, error)
 	DeleteImage(userID int64, tgFileID string) error
 	DeleteAllUserImages(userID int64) error
 	ReplaceTags(userID int64, tgFileID string, newTags []string) error
 	GenerateDescription(imageData []byte) (string, error)
 	IncrementUsageCount(userID int64, tgFileID string) error
+	ImageByTgFileID(tgFileID string) ([]byte, error)
 }
 
 type Handler struct {
@@ -103,6 +104,8 @@ func (h *Handler) ImagesByTags(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	sortBy := r.URL.Query().Get("sort_by")
+
 	var req models.TagsRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, fmt.Sprintf("failed to parse request: %v", err), http.StatusBadRequest)
@@ -110,7 +113,7 @@ func (h *Handler) ImagesByTags(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	exactMatch, partialMatch, err := h.service.ImagesByTags(req.Tags, userID)
+	exactMatch, partialMatch, err := h.service.ImagesByTags(req.Tags, userID, sortBy)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("failed to get images: %v", err), http.StatusInternalServerError)
 
@@ -360,4 +363,27 @@ func (h *Handler) IncrementUsageCount(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("Usage count incremented successfully"))
+}
+
+func (h *Handler) ImageByFileID(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	tgFileID := r.PathValue("tg_file_id")
+	if tgFileID == "" {
+		http.Error(w, "tg_file_id is required", http.StatusBadRequest)
+		return
+	}
+
+	imageData, err := h.service.ImageByTgFileID(tgFileID)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("failed to get image: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/octet-stream")
+	w.WriteHeader(http.StatusOK)
+	w.Write(imageData)
 }

@@ -112,19 +112,29 @@ func (s *Repository) ImageByUserAndFileID(userID int64, tgFileID string) (*model
 	return &image, nil
 }
 
-func (s *Repository) ImagesByTags(tags []string, userID int64) ([]*models.ImageWithTags, error) {
+func (s *Repository) ImagesByTags(tags []string, userID int64, sortBy string) ([]*models.ImageWithTags, error) {
 	if len(tags) == 0 {
 		return nil, fmt.Errorf("at least one tag is required")
 	}
 
-	query := `
+	orderClause := "ORDER BY CASE WHEN i.user_id = $2 THEN 0 ELSE 1 END"
+	switch sortBy {
+	case models.SortByUsageCount:
+		orderClause += ", i.usage_count DESC, i.created_at DESC"
+	case models.SortByCreatedAt:
+		orderClause += ", i.created_at DESC"
+	default:
+		orderClause += ", i.created_at DESC"
+	}
+
+	query := fmt.Sprintf(`
 		SELECT i.id, i.user_id, i.tg_file_id, i.file_type, i.usage_count, i.created_at 
 		FROM images i
 		JOIN tags t ON t.image_id = i.id
 		WHERE t.name = ANY($1) AND (i.user_id = $2 OR i.user_id = 0)
 		GROUP BY i.id, i.user_id, i.tg_file_id, i.file_type, i.usage_count, i.created_at
 		HAVING COUNT(DISTINCT t.name) = $3
-		ORDER BY CASE WHEN i.user_id = $2 THEN 0 ELSE 1 END, i.created_at DESC;`
+		%s;`, orderClause)
 
 	var images []*models.Image
 	err := s.db.Select(&images, query, pq.Array(tags), userID, len(tags))
@@ -150,19 +160,29 @@ func (s *Repository) ImagesByTags(tags []string, userID int64) ([]*models.ImageW
 	return result, nil
 }
 
-func (s *Repository) ImagesBySubsetOfTags(tags []string, userID int64) ([]*models.ImageWithTags, error) {
+func (s *Repository) ImagesBySubsetOfTags(tags []string, userID int64, sortBy string) ([]*models.ImageWithTags, error) {
 	if len(tags) == 0 {
 		return nil, fmt.Errorf("at least one tag is required")
 	}
 
-	query := `
+	orderClause := "ORDER BY CASE WHEN i.user_id = $2 THEN 0 ELSE 1 END, COUNT(DISTINCT t.name) DESC"
+	switch sortBy {
+	case models.SortByUsageCount:
+		orderClause += ", i.usage_count DESC, i.created_at DESC"
+	case models.SortByCreatedAt:
+		orderClause += ", i.created_at DESC"
+	default:
+		orderClause += ", i.created_at DESC"
+	}
+
+	query := fmt.Sprintf(`
 		SELECT i.id, i.user_id, i.tg_file_id, i.file_type, i.usage_count, i.created_at
 		FROM images i
 		JOIN tags t ON t.image_id = i.id
 		WHERE t.name = ANY($1) AND (i.user_id = $2 OR i.user_id = 0)
 		GROUP BY i.id, i.user_id, i.tg_file_id, i.file_type, i.usage_count, i.created_at
 		HAVING COUNT(DISTINCT t.name) < $3
-		ORDER BY CASE WHEN i.user_id = $2 THEN 0 ELSE 1 END, COUNT(DISTINCT t.name) DESC, i.created_at DESC;`
+		%s;`, orderClause)
 
 	var images []*models.Image
 	err := s.db.Select(&images, query, pq.Array(tags), userID, len(tags))

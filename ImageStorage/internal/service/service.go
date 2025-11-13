@@ -10,8 +10,8 @@ type ImageRepository interface {
 	Add(tgFileID string, userID int64, fileType string, tags []string) (int64, error)
 	AddTags(imageID int64, tags []string) error
 	ImageByUserAndFileID(userID int64, tgFileID string) (*models.Image, error)
-	ImagesByTags(tags []string, userID int64) ([]*models.ImageWithTags, error)
-	ImagesBySubsetOfTags(tags []string, userID int64) ([]*models.ImageWithTags, error)
+	ImagesByTags(tags []string, userID int64, sortBy string) ([]*models.ImageWithTags, error)
+	ImagesBySubsetOfTags(tags []string, userID int64, sortBy string) ([]*models.ImageWithTags, error)
 	ImagesByUser(userID int64, sortBy string) ([]*models.ImageWithTags, error)
 	DeleteImage(userID int64, tgFileID string) error
 	DeleteAllUserImages(userID int64) error
@@ -19,13 +19,19 @@ type ImageRepository interface {
 	IncrementUsageCount(userID int64, tgFileID string) error
 }
 
-type Service struct {
-	repo ImageRepository
+type TelegramClient interface {
+	ImageByFileID(fileID string) ([]byte, error)
 }
 
-func NewService(repo ImageRepository) *Service {
+type Service struct {
+	repo   ImageRepository
+	tgClient TelegramClient
+}
+
+func NewService(repo ImageRepository, tgClient TelegramClient) *Service {
 	return &Service{
-		repo: repo,
+		repo:   repo,
+		tgClient: tgClient,
 	}
 }
 
@@ -63,17 +69,25 @@ func (s *Service) UploadImage(tgFileID string, userID int64, fileType string, ta
 	return nil
 }
 
-func (s *Service) ImagesByTags(tags []string, userID int64) (exactMatch []*models.ImageWithTags, partialMatch []*models.ImageWithTags, err error) {
+func (s *Service) ImagesByTags(tags []string, userID int64, sortBy string) (exactMatch []*models.ImageWithTags, partialMatch []*models.ImageWithTags, err error) {
 	if len(tags) == 0 {
 		return nil, nil, fmt.Errorf("at least one tag is required")
 	}
 
-	exactMatch, err = s.repo.ImagesByTags(tags, userID)
+	if sortBy == "" {
+		sortBy = models.SortByCreatedAt
+	}
+
+	if sortBy != models.SortByUsageCount && sortBy != models.SortByCreatedAt {
+		return nil, nil, fmt.Errorf("invalid sort_by parameter: must be '%s' or '%s'", models.SortByUsageCount, models.SortByCreatedAt)
+	}
+
+	exactMatch, err = s.repo.ImagesByTags(tags, userID, sortBy)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to get images by tags: %w", err)
 	}
 
-	partialMatch, err = s.repo.ImagesBySubsetOfTags(tags, userID)
+	partialMatch, err = s.repo.ImagesBySubsetOfTags(tags, userID, sortBy)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to get images by subset of tags: %w", err)
 	}
@@ -156,4 +170,17 @@ func (s *Service) IncrementUsageCount(userID int64, tgFileID string) error {
 	}
 
 	return nil
+}
+
+func (s *Service) ImageByTgFileID(tgFileID string) ([]byte, error) {
+	if tgFileID == "" {
+		return nil, fmt.Errorf("tg_file_id is empty")
+	}
+
+	imageData, err := s.tgClient.ImageByFileID(tgFileID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get image from telegram: %w", err)
+	}
+
+	return imageData, nil
 }

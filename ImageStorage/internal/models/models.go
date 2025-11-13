@@ -51,3 +51,10 @@ type GetImagesResponse struct {
 	ExactMatch   []ImageInfoWithTags `json:"exact_match"`
 	PartialMatch []ImageInfoWithTags `json:"partial_match"`
 }
+
+type TelegramFileResponse struct {
+	Ok     bool `json:"ok"`
+	Result struct {
+		FilePath string `json:"file_path"`
+	} `json:"result"`
+}

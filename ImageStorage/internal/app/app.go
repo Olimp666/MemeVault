@@ -15,6 +15,7 @@ import (
 	"github.com/Olimp666/MemeVault/internal/api"
 	"github.com/Olimp666/MemeVault/internal/repository"
 	"github.com/Olimp666/MemeVault/internal/service"
+	"github.com/Olimp666/MemeVault/internal/tg"
 )
 
 type Config struct {
@@ -26,7 +27,8 @@ type Config struct {
 		Port     int64  `env:"POSTGRES_PORT"`
 	}
 
-	ServerURL string `env:"SERVER_URL"`
+	ServerURL        string `env:"SERVER_URL"`
+	TelegramBotToken string `env:"TELEGRAM_BOT_TOKEN"`
 }
 
 type Application struct {
@@ -123,7 +125,9 @@ func (a *Application) initDB() error {
 
 func (a *Application) initServer() error {
 	repo := repository.NewRepository(a.db)
-	svc := service.NewService(repo)
+	tgClient := tg.NewClient(a.cfg.TelegramBotToken)
+
+	svc := service.NewService(repo, tgClient)
 	handler := api.NewHandler(svc)
 
 	mux := http.NewServeMux()
@@ -135,6 +139,7 @@ func (a *Application) initServer() error {
 	mux.HandleFunc("/image/tags", handler.ReplaceTags)
 	mux.HandleFunc("/image/generate-description", handler.GenerateDescription)
 	mux.HandleFunc("/image/increment-usage", handler.IncrementUsageCount)
+	mux.HandleFunc("/image/{tg_file_id}", handler.ImageByFileID)
 
 	a.server = &http.Server{
 		Addr:    a.cfg.ServerURL,
