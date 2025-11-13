@@ -8,11 +8,9 @@ import json
 
 app = Flask(__name__)
 
-# Инициализация easyocr с поддержкой русского и английского языков
 reader = easyocr.Reader(['ru', 'en'])
 
 def is_similar(a, b, threshold=0.9):
-    """Проверяет, похожи ли строки (чтобы не дублировать текст с соседних кадров)."""
     return difflib.SequenceMatcher(None, a, b).ratio() > threshold
 
 @app.route("/video_text_extraction", methods=["POST"])
@@ -70,4 +68,4 @@ def video_ocr():
     )
 
 if __name__ == "__main__":
-    app.run(host="127.0.0.1", port=5000)
+    app.run(host="0.0.0.0", port=5000)

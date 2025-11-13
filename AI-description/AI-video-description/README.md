@@ -5,13 +5,10 @@
 
 ## Запуск локального Flask веб-сервера с моделью
 
-Из AI-video-description нужно выполнить следующие команды:
+Из AI-video-description нужно выполнить:
 
 ```bash
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-python app.py
+docker compose up --build
 ```
 
 ## Генерация описания к видео
@@ -19,5 +16,11 @@ python app.py
 Пример curl запроса:
 
 ```bash
-curl -X POST -F "video=@<путь_к_видео>" http://127.0.0.1:5000/video_description
+curl -X POST -F "video=@<путь_к_видео>" http://localhost:5002/video_description
+```
+
+Пример ответа:
+
+```json
+{"caption": "<текст_из_видео>"}
 ```

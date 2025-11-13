@@ -1,6 +1,7 @@
 from flask import Flask, request, Response
 from transformers import VisionEncoderDecoderModel, ViTImageProcessor, AutoTokenizer
 from PIL import Image
+from deep_translator import GoogleTranslator
 import torch
 import json
 
@@ -9,7 +10,7 @@ app = Flask(__name__)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print("Используется устройство:", device)
 
-model_name = "tuman/vit-rugpt2-image-captioning"
+model_name = "nlpconnect/vit-gpt2-image-captioning"
 model = VisionEncoderDecoderModel.from_pretrained(model_name).to(device)
 feature_extractor = ViTImageProcessor.from_pretrained(model_name)
 tokenizer = AutoTokenizer.from_pretrained(model_name)
@@ -31,15 +32,21 @@ def caption():
     output_ids = model.generate(
         pixel_values,
         max_length=50,
-        num_beams=3,
+        num_beams=4,
         do_sample=False
     )
-    caption = tokenizer.decode(output_ids[0], skip_special_tokens=True)
+    caption_en = tokenizer.decode(output_ids[0], skip_special_tokens=True)
+
+    try:
+        caption_ru = GoogleTranslator(source='en', target='ru').translate(caption_en)
+    except Exception as e:
+        print("Ошибка перевода:", e)
+        caption_ru = caption_en
 
     return Response(
-        json.dumps({"caption": caption}, ensure_ascii=False),
+        json.dumps({"caption": caption_ru}, ensure_ascii=False),
         mimetype="application/json"
     )
 
 if __name__ == "__main__":
-    app.run(host="127.0.0.1", port=5000)
+    app.run(host="0.0.0.0", port=5000)

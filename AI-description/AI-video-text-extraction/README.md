@@ -5,13 +5,10 @@
 
 ## Запуск локального Flask веб-сервера с моделью
 
-Из AI-video-text-extraction нужно выполнить следующие команды:
+Из AI-video-text-extraction нужно выполнить:
 
 ```bash
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-python app.py
+docker compose up --build
 ```
 
 ## Извлечение текста из видео
@@ -19,5 +16,11 @@ python app.py
 Пример curl запроса:
 
 ```bash
-curl -X POST -F "video=@<путь_к_видео>" http://127.0.0.1:5000/video_text_extraction
+curl -X POST -F "video=@<путь_к_видео>" http://localhost:5003/video_text_extraction
+```
+
+Пример ответа:
+
+```json
+{"text": "<текст_из_видео>"}
 ```

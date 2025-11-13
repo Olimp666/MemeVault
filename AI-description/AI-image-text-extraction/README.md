@@ -5,13 +5,10 @@
 
 ## Запуск локального Flask веб-сервера с моделью
 
-Из AI-image-text-extraction нужно выполнить следующие команды:
+Из AI-image-text-extraction нужно выполнить:
 
 ```bash
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-python app.py
+docker compose up --build
 ```
 
 ## Извлечение текста с картинки
@@ -19,5 +16,11 @@ python app.py
 Пример curl запроса:
 
 ```bash
-curl -X POST -F "image=@<путь_к_картинке>" http://127.0.0.1:5000/image_text_extraction
+curl -X POST -F "image=@<путь_к_картинке>" http://localhost:5001/image_text_extraction
+```
+
+Пример ответа:
+
+```json
+{"text": "<текст_с_картинки>"}
 ```

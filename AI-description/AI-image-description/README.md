@@ -5,13 +5,10 @@
 
 ## Запуск локального Flask веб-сервера с моделью
 
-Из AI-image-description нужно выполнить следующие команды:
+Из AI-image-description нужно выполнить:
 
 ```bash
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-python app.py
+docker compose up --build
 ```
 
 ## Генерация описания к видео
@@ -19,5 +16,11 @@ python app.py
 Пример curl запроса:
 
 ```bash
-curl -X POST -F "image=@<путь_к_картинке>" http://127.0.0.1:5000/image_description
+curl -X POST -F "image=@<путь_к_картинке>" http://localhost:5000/image_description
+```
+
+Пример ответа:
+
+```json
+{"caption": "<текст_с_картинки>"}
 ```

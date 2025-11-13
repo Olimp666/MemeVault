@@ -4,7 +4,6 @@ import json
 
 app = Flask(__name__)
 
-# Инициализация OCR с поддержкой русского и английского языков
 reader = easyocr.Reader(['ru', 'en'])
 
 @app.route("/image_text_extraction", methods=["POST"])
@@ -19,7 +18,6 @@ def caption():
     image_file = request.files['image']
     image_bytes = image_file.read()
 
-    # Распознаём текст
     result = reader.readtext(image_bytes, detail=0)
 
     text = " ".join(result) if result else ""
@@ -32,4 +30,4 @@ def caption():
     )
 
 if __name__ == "__main__":
-    app.run(host="127.0.0.1", port=5000)
+    app.run(host="0.0.0.0", port=5000)
