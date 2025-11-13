@@ -1,3 +1,6 @@
+-- Enable fuzzystrmatch extension for fuzzy string matching
+CREATE EXTENSION IF NOT EXISTS fuzzystrmatch;
+
 CREATE TABLE images
 (
     id SERIAL PRIMARY KEY,

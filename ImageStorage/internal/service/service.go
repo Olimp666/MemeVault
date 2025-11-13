@@ -10,8 +10,8 @@ type ImageRepository interface {
 	Add(tgFileID string, userID int64, fileType string, tags []string) (int64, error)
 	AddTags(imageID int64, tags []string) error
 	ImageByUserAndFileID(userID int64, tgFileID string) (*models.Image, error)
-	ImagesByTags(tags []string, userID int64, sortBy string) ([]*models.ImageWithTags, error)
-	ImagesBySubsetOfTags(tags []string, userID int64, sortBy string) ([]*models.ImageWithTags, error)
+	ImagesByFuzzyTags(tags []string, userID int64, sortBy string, maxDistance int) ([]*models.ImageWithTags, error)
+	ImagesBySubsetOfFuzzyTags(tags []string, userID int64, sortBy string, maxDistance int) ([]*models.ImageWithTags, error)
 	ImagesByUser(userID int64, sortBy string) ([]*models.ImageWithTags, error)
 	DeleteImage(userID int64, tgFileID string) error
 	DeleteAllUserImages(userID int64) error
@@ -24,13 +24,13 @@ type TelegramClient interface {
 }
 
 type Service struct {
-	repo   ImageRepository
+	repo     ImageRepository
 	tgClient TelegramClient
 }
 
 func NewService(repo ImageRepository, tgClient TelegramClient) *Service {
 	return &Service{
-		repo:   repo,
+		repo:     repo,
 		tgClient: tgClient,
 	}
 }
@@ -82,14 +82,16 @@ func (s *Service) ImagesByTags(tags []string, userID int64, sortBy string) (exac
 		return nil, nil, fmt.Errorf("invalid sort_by parameter: must be '%s' or '%s'", models.SortByUsageCount, models.SortByCreatedAt)
 	}
 
-	exactMatch, err = s.repo.ImagesByTags(tags, userID, sortBy)
+	maxDistance := 2
+
+	exactMatch, err = s.repo.ImagesByFuzzyTags(tags, userID, sortBy, maxDistance)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to get images by tags: %w", err)
+		return nil, nil, fmt.Errorf("failed to get images by fuzzy tags: %w", err)
 	}
 
-	partialMatch, err = s.repo.ImagesBySubsetOfTags(tags, userID, sortBy)
+	partialMatch, err = s.repo.ImagesBySubsetOfFuzzyTags(tags, userID, sortBy, maxDistance)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to get images by subset of tags: %w", err)
+		return nil, nil, fmt.Errorf("failed to get images by subset of fuzzy tags: %w", err)
 	}
 
 	return exactMatch, partialMatch, nil
@@ -99,7 +101,7 @@ func (s *Service) ImagesByUser(userID int64, sortBy string) ([]*models.ImageWith
 	if sortBy == "" {
 		sortBy = models.SortByCreatedAt
 	}
-	
+
 	if sortBy != models.SortByUsageCount && sortBy != models.SortByCreatedAt {
 		return nil, fmt.Errorf("invalid sort_by parameter: must be '%s' or '%s'", models.SortByUsageCount, models.SortByCreatedAt)
 	}
