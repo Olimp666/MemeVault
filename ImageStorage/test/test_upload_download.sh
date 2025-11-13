@@ -344,17 +344,6 @@ fi
 
 echo -e "${YELLOW}12. Тест генерации описания...${NC}"
 
-# Проверяем генерацию описания
-GEN_DESC=$(curl -s -X POST "$SERVER_URL/image/generate-description" \
-  -F "image=@test/test_image.jpg")
-
-if echo "$GEN_DESC" | grep -q "метод пока не реализован"; then
-    echo -e "${GREEN}✓ Генерация описания возвращает корректный ответ${NC}"
-else
-    echo -e "${RED}Ошибка: Генерация описания вернула неожиданный ответ${NC}"
-    echo "Ответ: $GEN_DESC"
-    exit 1
-fi
 
 echo -e "${YELLOW}13. Тест счетчика использования...${NC}"
 

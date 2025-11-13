@@ -112,12 +112,16 @@ func (s *Repository) ImageByUserAndFileID(userID int64, tgFileID string) (*model
 	return &image, nil
 }
 
-func (s *Repository) ImagesByTags(tags []string, userID int64, sortBy string) ([]*models.ImageWithTags, error) {
+func (s *Repository) ImagesByFuzzyTags(tags []string, userID int64, sortBy string, maxDistance int) ([]*models.ImageWithTags, error) {
 	if len(tags) == 0 {
 		return nil, fmt.Errorf("at least one tag is required")
 	}
 
-	orderClause := "ORDER BY CASE WHEN i.user_id = $2 THEN 0 ELSE 1 END"
+	if maxDistance < 0 {
+		maxDistance = 2
+	}
+
+	orderClause := "ORDER BY CASE WHEN i.user_id = $2 THEN 0 ELSE 1 END, total_distance ASC"
 	switch sortBy {
 	case models.SortByUsageCount:
 		orderClause += ", i.usage_count DESC, i.created_at DESC"
@@ -128,18 +132,47 @@ func (s *Repository) ImagesByTags(tags []string, userID int64, sortBy string) ([
 	}
 
 	query := fmt.Sprintf(`
-		SELECT i.id, i.user_id, i.tg_file_id, i.file_type, i.usage_count, i.created_at 
+		WITH input_tags AS (
+			SELECT unnest($1::text[]) as input_tag
+		),
+		fuzzy_matches AS (
+			SELECT 
+				t.image_id,
+				t.name as db_tag,
+				it.input_tag,
+				levenshtein(LOWER(t.name), LOWER(it.input_tag)) as distance
+			FROM tags t
+			CROSS JOIN input_tags it
+			WHERE levenshtein(LOWER(t.name), LOWER(it.input_tag)) <= $3
+		),
+		best_matches AS (
+			SELECT DISTINCT ON (image_id, input_tag)
+				image_id,
+				input_tag,
+				db_tag,
+				distance
+			FROM fuzzy_matches
+			ORDER BY image_id, input_tag, distance ASC
+		)
+		SELECT 
+			i.id, i.user_id, i.tg_file_id, i.file_type, i.usage_count, i.created_at,
+			SUM(bm.distance) as total_distance
 		FROM images i
-		JOIN tags t ON t.image_id = i.id
-		WHERE t.name = ANY($1) AND (i.user_id = $2 OR i.user_id = 0)
+		JOIN best_matches bm ON bm.image_id = i.id
+		WHERE (i.user_id = $2 OR i.user_id = 0)
 		GROUP BY i.id, i.user_id, i.tg_file_id, i.file_type, i.usage_count, i.created_at
-		HAVING COUNT(DISTINCT t.name) = $3
+		HAVING COUNT(DISTINCT bm.input_tag) = $4
 		%s;`, orderClause)
 
-	var images []*models.Image
-	err := s.db.Select(&images, query, pq.Array(tags), userID, len(tags))
+	type imageWithDistance struct {
+		models.Image
+		TotalDistance int `db:"total_distance"`
+	}
+
+	var images []imageWithDistance
+	err := s.db.Select(&images, query, pq.Array(tags), userID, maxDistance, len(tags))
 	if err != nil {
-		return nil, fmt.Errorf("can't get images by tags: %w", err)
+		return nil, fmt.Errorf("can't get images by fuzzy tags: %w", err)
 	}
 
 	result := make([]*models.ImageWithTags, 0, len(images))
@@ -152,7 +185,7 @@ func (s *Repository) ImagesByTags(tags []string, userID int64, sortBy string) ([
 		}
 
 		result = append(result, &models.ImageWithTags{
-			Image: *img,
+			Image: img.Image,
 			Tags:  imgTags,
 		})
 	}
@@ -160,12 +193,16 @@ func (s *Repository) ImagesByTags(tags []string, userID int64, sortBy string) ([
 	return result, nil
 }
 
-func (s *Repository) ImagesBySubsetOfTags(tags []string, userID int64, sortBy string) ([]*models.ImageWithTags, error) {
+func (s *Repository) ImagesBySubsetOfFuzzyTags(tags []string, userID int64, sortBy string, maxDistance int) ([]*models.ImageWithTags, error) {
 	if len(tags) == 0 {
 		return nil, fmt.Errorf("at least one tag is required")
 	}
 
-	orderClause := "ORDER BY CASE WHEN i.user_id = $2 THEN 0 ELSE 1 END, COUNT(DISTINCT t.name) DESC"
+	if maxDistance < 0 {
+		maxDistance = 2
+	}
+
+	orderClause := "ORDER BY CASE WHEN i.user_id = $2 THEN 0 ELSE 1 END, match_count DESC, total_distance ASC"
 	switch sortBy {
 	case models.SortByUsageCount:
 		orderClause += ", i.usage_count DESC, i.created_at DESC"
@@ -176,18 +213,49 @@ func (s *Repository) ImagesBySubsetOfTags(tags []string, userID int64, sortBy st
 	}
 
 	query := fmt.Sprintf(`
-		SELECT i.id, i.user_id, i.tg_file_id, i.file_type, i.usage_count, i.created_at
+		WITH input_tags AS (
+			SELECT unnest($1::text[]) as input_tag
+		),
+		fuzzy_matches AS (
+			SELECT 
+				t.image_id,
+				t.name as db_tag,
+				it.input_tag,
+				levenshtein(LOWER(t.name), LOWER(it.input_tag)) as distance
+			FROM tags t
+			CROSS JOIN input_tags it
+			WHERE levenshtein(LOWER(t.name), LOWER(it.input_tag)) <= $3
+		),
+		best_matches AS (
+			SELECT DISTINCT ON (image_id, input_tag)
+				image_id,
+				input_tag,
+				db_tag,
+				distance
+			FROM fuzzy_matches
+			ORDER BY image_id, input_tag, distance ASC
+		)
+		SELECT 
+			i.id, i.user_id, i.tg_file_id, i.file_type, i.usage_count, i.created_at,
+			COUNT(DISTINCT bm.input_tag) as match_count,
+			SUM(bm.distance) as total_distance
 		FROM images i
-		JOIN tags t ON t.image_id = i.id
-		WHERE t.name = ANY($1) AND (i.user_id = $2 OR i.user_id = 0)
+		JOIN best_matches bm ON bm.image_id = i.id
+		WHERE (i.user_id = $2 OR i.user_id = 0)
 		GROUP BY i.id, i.user_id, i.tg_file_id, i.file_type, i.usage_count, i.created_at
-		HAVING COUNT(DISTINCT t.name) < $3
+		HAVING COUNT(DISTINCT bm.input_tag) < $4
 		%s;`, orderClause)
 
-	var images []*models.Image
-	err := s.db.Select(&images, query, pq.Array(tags), userID, len(tags))
+	type imageWithStats struct {
+		models.Image
+		MatchCount    int `db:"match_count"`
+		TotalDistance int `db:"total_distance"`
+	}
+
+	var images []imageWithStats
+	err := s.db.Select(&images, query, pq.Array(tags), userID, maxDistance, len(tags))
 	if err != nil {
-		return nil, fmt.Errorf("can't get images by subset of tags: %w", err)
+		return nil, fmt.Errorf("can't get images by subset of fuzzy tags: %w", err)
 	}
 
 	result := make([]*models.ImageWithTags, 0, len(images))
@@ -200,7 +268,7 @@ func (s *Repository) ImagesBySubsetOfTags(tags []string, userID int64, sortBy st
 		}
 
 		result = append(result, &models.ImageWithTags{
-			Image: *img,
+			Image: img.Image,
 			Tags:  imgTags,
 		})
 	}
