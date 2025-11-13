@@ -1,0 +1,4 @@
+flask
+easyocr
+Pillow
+torch
