@@ -13,6 +13,7 @@ MemeVault представляет собой полнофункциональн
 1. **ImageStorage** (Go) — backend-сервис, предоставляющий RESTful API для управления изображениями
 2. **MemeVaultControl** (C#) — Telegram-бот для взаимодействия с пользователями
 3. **PostgreSQL** — база данных с поддержкой нечёткого поиска (fuzzy search)
+4. [**MemeVaultUI**](https://github.com/arthur-alekseev-itmo/MemeVaultUI) — веб-интерфейс для Mini App
 
 ### Система хранилищ
 
