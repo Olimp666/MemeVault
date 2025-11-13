@@ -12,11 +12,12 @@ import (
 type ImageService interface {
 	UploadImage(tgFileID string, userID int64, fileType string, tags []string) error
 	ImagesByTags(tags []string, userID int64) (exactMatch []*models.ImageWithTags, partialMatch []*models.ImageWithTags, err error)
-	ImagesByUser(userID int64) ([]*models.ImageWithTags, error)
+	ImagesByUser(userID int64, sortBy string) ([]*models.ImageWithTags, error)
 	DeleteImage(userID int64, tgFileID string) error
 	DeleteAllUserImages(userID int64) error
 	ReplaceTags(userID int64, tgFileID string, newTags []string) error
 	GenerateDescription(imageData []byte) (string, error)
+	IncrementUsageCount(userID int64, tgFileID string) error
 }
 
 type Handler struct {
@@ -162,7 +163,9 @@ func (h *Handler) ImagesByUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	images, err := h.service.ImagesByUser(userID)
+	sortBy := r.URL.Query().Get("sort_by")
+
+	images, err := h.service.ImagesByUser(userID, sortBy)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("failed to get images: %v", err), http.StatusInternalServerError)
 
@@ -323,4 +326,38 @@ func (h *Handler) GenerateDescription(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"description": description,
 	})
+}
+
+func (h *Handler) IncrementUsageCount(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	userIDStr := r.URL.Query().Get("user_id")
+	if userIDStr == "" {
+		http.Error(w, "user_id query parameter is required", http.StatusBadRequest)
+		return
+	}
+
+	userID, err := strconv.ParseInt(userIDStr, 10, 64)
+	if err != nil {
+		http.Error(w, "invalid user_id", http.StatusBadRequest)
+		return
+	}
+
+	tgFileID := r.URL.Query().Get("tg_file_id")
+	if tgFileID == "" {
+		http.Error(w, "tg_file_id query parameter is required", http.StatusBadRequest)
+		return
+	}
+
+	err = h.service.IncrementUsageCount(userID, tgFileID)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("failed to increment usage count: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("Usage count incremented successfully"))
 }

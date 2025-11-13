@@ -37,12 +37,13 @@ func (s *Repository) Add(tgFileID string, userID int64, fileType string, tags []
 	}
 
 	if len(tags) > 0 {
-		queryTag := `INSERT INTO tags (image_id, name) VALUES (:image_id, :name)`
+		queryTag := `INSERT INTO tags (image_id, name, position) VALUES (:image_id, :name, :position)`
 
-		for _, tag := range tags {
+		for i, tag := range tags {
 			_, err = tx.NamedExec(queryTag, map[string]interface{}{
 				"image_id": imageID,
 				"name":     tag,
+				"position": i,
 			})
 			if err != nil {
 				return 0, fmt.Errorf("can't insert tag '%s': %w", tag, err)
@@ -72,12 +73,20 @@ func (s *Repository) AddTags(imageID int64, tags []string) error {
 		}
 	}()
 
-	queryTag := `INSERT INTO tags (image_id, name) VALUES (:image_id, :name) ON CONFLICT DO NOTHING`
+	var maxPosition int
+	queryMaxPos := `SELECT COALESCE(MAX(position), -1) FROM tags WHERE image_id = $1;`
+	err = tx.Get(&maxPosition, queryMaxPos, imageID)
+	if err != nil {
+		return fmt.Errorf("can't get max position: %w", err)
+	}
 
-	for _, tag := range tags {
+	queryTag := `INSERT INTO tags (image_id, name, position) VALUES (:image_id, :name, :position) ON CONFLICT DO NOTHING`
+
+	for i, tag := range tags {
 		_, err = tx.NamedExec(queryTag, map[string]interface{}{
 			"image_id": imageID,
 			"name":     tag,
+			"position": maxPosition + 1 + i,
 		})
 		if err != nil {
 			return fmt.Errorf("can't insert tag '%s': %w", tag, err)
@@ -109,13 +118,13 @@ func (s *Repository) ImagesByTags(tags []string, userID int64) ([]*models.ImageW
 	}
 
 	query := `
-		SELECT i.id, i.user_id, i.tg_file_id, i.file_type, i.created_at 
+		SELECT i.id, i.user_id, i.tg_file_id, i.file_type, i.usage_count, i.created_at 
 		FROM images i
 		JOIN tags t ON t.image_id = i.id
 		WHERE t.name = ANY($1) AND (i.user_id = $2 OR i.user_id = 0)
-		GROUP BY i.id, i.user_id, i.tg_file_id, i.file_type, i.created_at
+		GROUP BY i.id, i.user_id, i.tg_file_id, i.file_type, i.usage_count, i.created_at
 		HAVING COUNT(DISTINCT t.name) = $3
-		ORDER BY i.created_at DESC;`
+		ORDER BY CASE WHEN i.user_id = $2 THEN 0 ELSE 1 END, i.created_at DESC;`
 
 	var images []*models.Image
 	err := s.db.Select(&images, query, pq.Array(tags), userID, len(tags))
@@ -125,7 +134,7 @@ func (s *Repository) ImagesByTags(tags []string, userID int64) ([]*models.ImageW
 
 	result := make([]*models.ImageWithTags, 0, len(images))
 	for _, img := range images {
-		tagsQuery := `SELECT name FROM tags WHERE image_id = $1 ORDER BY name;`
+		tagsQuery := `SELECT name FROM tags WHERE image_id = $1 ORDER BY position;`
 		var imgTags []string
 		err := s.db.Select(&imgTags, tagsQuery, img.ID)
 		if err != nil {
@@ -147,13 +156,13 @@ func (s *Repository) ImagesBySubsetOfTags(tags []string, userID int64) ([]*model
 	}
 
 	query := `
-		SELECT i.id, i.user_id, i.tg_file_id, i.file_type, i.created_at
+		SELECT i.id, i.user_id, i.tg_file_id, i.file_type, i.usage_count, i.created_at
 		FROM images i
 		JOIN tags t ON t.image_id = i.id
 		WHERE t.name = ANY($1) AND (i.user_id = $2 OR i.user_id = 0)
-		GROUP BY i.id, i.user_id, i.tg_file_id, i.file_type, i.created_at
+		GROUP BY i.id, i.user_id, i.tg_file_id, i.file_type, i.usage_count, i.created_at
 		HAVING COUNT(DISTINCT t.name) < $3
-		ORDER BY COUNT(DISTINCT t.name) DESC, i.created_at DESC;`
+		ORDER BY CASE WHEN i.user_id = $2 THEN 0 ELSE 1 END, COUNT(DISTINCT t.name) DESC, i.created_at DESC;`
 
 	var images []*models.Image
 	err := s.db.Select(&images, query, pq.Array(tags), userID, len(tags))
@@ -163,7 +172,7 @@ func (s *Repository) ImagesBySubsetOfTags(tags []string, userID int64) ([]*model
 
 	result := make([]*models.ImageWithTags, 0, len(images))
 	for _, img := range images {
-		tagsQuery := `SELECT name FROM tags WHERE image_id = $1 ORDER BY name;`
+		tagsQuery := `SELECT name FROM tags WHERE image_id = $1 ORDER BY position;`
 		var imgTags []string
 		err := s.db.Select(&imgTags, tagsQuery, img.ID)
 		if err != nil {
@@ -179,8 +188,18 @@ func (s *Repository) ImagesBySubsetOfTags(tags []string, userID int64) ([]*model
 	return result, nil
 }
 
-func (s *Repository) ImagesByUser(userID int64) ([]*models.ImageWithTags, error) {
-	query := `SELECT id, user_id, tg_file_id, file_type, created_at FROM images WHERE user_id = $1 ORDER BY created_at DESC;`
+func (s *Repository) ImagesByUser(userID int64, sortBy string) ([]*models.ImageWithTags, error) {
+	var orderClause string
+	switch sortBy {
+	case models.SortByUsageCount:
+		orderClause = "ORDER BY usage_count DESC, created_at DESC"
+	case models.SortByCreatedAt:
+		orderClause = "ORDER BY created_at DESC"
+	default:
+		orderClause = "ORDER BY created_at DESC"
+	}
+
+	query := fmt.Sprintf(`SELECT id, user_id, tg_file_id, file_type, usage_count, created_at FROM images WHERE user_id = $1 %s;`, orderClause)
 
 	var images []*models.Image
 	err := s.db.Select(&images, query, userID)
@@ -190,7 +209,7 @@ func (s *Repository) ImagesByUser(userID int64) ([]*models.ImageWithTags, error)
 
 	result := make([]*models.ImageWithTags, 0, len(images))
 	for _, img := range images {
-		tagsQuery := `SELECT name FROM tags WHERE image_id = $1 ORDER BY name;`
+		tagsQuery := `SELECT name FROM tags WHERE image_id = $1 ORDER BY position;`
 		var tags []string
 		err := s.db.Select(&tags, tagsQuery, img.ID)
 		if err != nil {
@@ -260,11 +279,12 @@ func (s *Repository) ReplaceTags(userID int64, tgFileID string, newTags []string
 	}
 
 	if len(newTags) > 0 {
-		queryInsertTag := `INSERT INTO tags (image_id, name) VALUES (:image_id, :name)`
-		for _, tag := range newTags {
+		queryInsertTag := `INSERT INTO tags (image_id, name, position) VALUES (:image_id, :name, :position)`
+		for i, tag := range newTags {
 			_, err = tx.NamedExec(queryInsertTag, map[string]interface{}{
 				"image_id": imageID,
 				"name":     tag,
+				"position": i,
 			})
 			if err != nil {
 				return fmt.Errorf("can't insert tag '%s': %w", tag, err)
@@ -274,6 +294,25 @@ func (s *Repository) ReplaceTags(userID int64, tgFileID string, newTags []string
 
 	if err = tx.Commit(); err != nil {
 		return fmt.Errorf("can't commit transaction: %w", err)
+	}
+
+	return nil
+}
+
+func (s *Repository) IncrementUsageCount(userID int64, tgFileID string) error {
+	query := `UPDATE images SET usage_count = usage_count + 1 WHERE user_id = $1 AND tg_file_id = $2;`
+	result, err := s.db.Exec(query, userID, tgFileID)
+	if err != nil {
+		return fmt.Errorf("can't increment usage count: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("can't get rows affected: %w", err)
+	}
+
+	if rowsAffected == 0 {
+		return fmt.Errorf("image not found")
 	}
 
 	return nil

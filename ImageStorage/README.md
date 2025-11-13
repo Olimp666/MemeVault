@@ -11,6 +11,7 @@
 - [Удаление конкретной картинки](#удаление-конкретной-картинки) - `DELETE /image/delete`
 - [Удаление всех картинок пользователя](#удаление-всех-картинок-пользователя) - `DELETE /user/images/delete`
 - [Замена тегов картинки](#замена-тегов-картинки) - `PUT /image/tags`
+- [Увеличение счетчика использования](#увеличение-счетчика-использования) - `POST /image/increment-usage`
 - [Генерация описания к картинке](#генерация-описания-к-картинке) - `POST /image/generate-description`
 
 ### Дополнительная информация
@@ -39,7 +40,7 @@ docker volume rm deployments_pg_data
 Сохраняет tg_file_id медиафайла из Telegram с указанным типом и тегами.
 
 ```bash
-curl -X POST "http://localhost/upload?user_id=123456789&tg_file_id=AgACAgIAAxkBAAIC...&file_type=photo" \
+curl -X POST "http://localhost/upload?user_id=1&tg_file_id=xxx&file_type=photo" \
   -H "Content-Type: application/json" \
   -d '{
     "tags": ["meme", "funny"]
@@ -66,7 +67,7 @@ Created
 Результаты отсортированы по дате создания (новые первыми).
 
 ```bash
-curl -X POST "http://localhost/images?user_id=123456789" \
+curl -X POST "http://localhost/images?user_id=1" \
   -H "Content-Type: application/json" \
   -d '{
     "tags": ["meme", "funny"]
@@ -112,10 +113,10 @@ curl -X POST "http://localhost/images?user_id=123456789" \
 
 #### Получение всех медиафайлов пользователя
 
-Возвращает все медиафайлы конкретного пользователя без фильтрации по тегам.
+Возвращает все медиафайлы конкретного пользователя с возможностью выбора типа сортировки.
 
 ```bash
-curl -X GET "http://localhost/user/images?user_id=123456789"
+curl -X GET "http://localhost/user/images?user_id=1&sort_by=usage_count"
 ```
 
 Ответ:
@@ -137,12 +138,20 @@ curl -X GET "http://localhost/user/images?user_id=123456789"
 ```
 
 **Query параметры:**
-- `user_id` (int64) - ID пользователя Telegram
+- `user_id` (int64, обязательный) - ID пользователя Telegram
+- `sort_by` (string, опциональный) - Тип сортировки:
+  - `usage_count` - по частоте использования (от большего к меньшему), затем по дате создания
+  - `created_at` - по дате создания (новые первыми) - **по умолчанию**
 
 **Особенности:**
 - Возвращает только медиафайлы указанного пользователя (НЕ включает публичные файлы)
-- Результаты отсортированы по `created_at DESC` (новые первыми)
 - Для каждого медиафайла возвращаются все его теги
+- Если `sort_by` не указан или пустой, используется сортировка по `created_at`
+- При указании неверного значения `sort_by` возвращается ошибка
+
+**Возможные ошибки:**
+- HTTP 400 - Отсутствует user_id
+- HTTP 500 - Неверное значение sort_by или ошибка базы данных
 
 **Повторная загрузка:**
 - Если пользователь загружает тот же `tg_file_id` повторно с новыми тегами, изображение НЕ дублируется
@@ -154,7 +163,7 @@ curl -X GET "http://localhost/user/images?user_id=123456789"
 Удаляет конкретную картинку пользователя по tg_file_id.
 
 ```bash
-curl -X DELETE "http://localhost/image/delete?user_id=123456789&tg_file_id=AgACAgIAAxkBAAIC..."
+curl -X DELETE "http://localhost/image/delete?user_id=1&tg_file_id=xxx"
 ```
 
 Ответ (HTTP 200):
@@ -171,7 +180,7 @@ Image deleted successfully
 Удаляет все картинки конкретного пользователя.
 
 ```bash
-curl -X DELETE "http://localhost/user/images/delete?user_id=123456789"
+curl -X DELETE "http://localhost/user/images/delete?user_id=1"
 ```
 
 Ответ (HTTP 200):
@@ -189,7 +198,7 @@ All user images deleted successfully
 **Важно:** Нельзя заменять теги для публичных изображений (user_id = 0).
 
 ```bash
-curl -X PUT "http://localhost/image/tags?user_id=123456789&tg_file_id=AgACAgIAAxkBAAIC..." \
+curl -X PUT "http://localhost/image/tags?user_id=1&tg_file_id=xxx" \
   -H "Content-Type: application/json" \
   -d '{
     "tags": ["новый_тег1", "новый_тег2"]
@@ -211,6 +220,34 @@ Tags replaced successfully
 **Особенности:**
 - Все старые теги удаляются и заменяются новыми
 - Нельзя использовать для публичных изображений (user_id = 0)
+
+#### Увеличение счетчика использования
+
+Увеличивает счетчик использования картинки на 1. Используется для отслеживания популярности изображений.
+
+```bash
+curl -X POST "http://localhost/image/increment-usage?user_id=123456789&tg_file_id=AgACAgIAAxkBAAIC..."
+```
+
+Ответ (HTTP 200):
+```
+Usage count incremented successfully
+```
+
+**Query параметры:**
+- `user_id` (int64) - ID пользователя Telegram
+- `tg_file_id` (string) - File ID из Telegram API
+
+**Особенности:**
+- Каждый вызов увеличивает счетчик `usage_count` на 1
+- Счетчик хранится в таблице `images` в столбце `usage_count`
+- Начальное значение при создании изображения: 0
+- Можно использовать для отслеживания популярных мемов/изображений
+- Возвращает ошибку, если изображение не найдено
+
+**Возможные ошибки:**
+- HTTP 400 - Отсутствует обязательный параметр
+- HTTP 500 - Изображение не найдено или ошибка базы данных
 
 #### Генерация описания к картинке
 

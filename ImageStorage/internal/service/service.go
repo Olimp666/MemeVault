@@ -12,10 +12,11 @@ type ImageRepository interface {
 	ImageByUserAndFileID(userID int64, tgFileID string) (*models.Image, error)
 	ImagesByTags(tags []string, userID int64) ([]*models.ImageWithTags, error)
 	ImagesBySubsetOfTags(tags []string, userID int64) ([]*models.ImageWithTags, error)
-	ImagesByUser(userID int64) ([]*models.ImageWithTags, error)
+	ImagesByUser(userID int64, sortBy string) ([]*models.ImageWithTags, error)
 	DeleteImage(userID int64, tgFileID string) error
 	DeleteAllUserImages(userID int64) error
 	ReplaceTags(userID int64, tgFileID string, newTags []string) error
+	IncrementUsageCount(userID int64, tgFileID string) error
 }
 
 type Service struct {
@@ -80,8 +81,16 @@ func (s *Service) ImagesByTags(tags []string, userID int64) (exactMatch []*model
 	return exactMatch, partialMatch, nil
 }
 
-func (s *Service) ImagesByUser(userID int64) ([]*models.ImageWithTags, error) {
-	images, err := s.repo.ImagesByUser(userID)
+func (s *Service) ImagesByUser(userID int64, sortBy string) ([]*models.ImageWithTags, error) {
+	if sortBy == "" {
+		sortBy = models.SortByCreatedAt
+	}
+	
+	if sortBy != models.SortByUsageCount && sortBy != models.SortByCreatedAt {
+		return nil, fmt.Errorf("invalid sort_by parameter: must be '%s' or '%s'", models.SortByUsageCount, models.SortByCreatedAt)
+	}
+
+	images, err := s.repo.ImagesByUser(userID, sortBy)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get images by user: %w", err)
 	}
@@ -134,4 +143,17 @@ func (s *Service) ReplaceTags(userID int64, tgFileID string, newTags []string) e
 
 func (s *Service) GenerateDescription(imageData []byte) (string, error) {
 	return "метод пока не реализован", nil
+}
+
+func (s *Service) IncrementUsageCount(userID int64, tgFileID string) error {
+	if tgFileID == "" {
+		return fmt.Errorf("tg_file_id is empty")
+	}
+
+	err := s.repo.IncrementUsageCount(userID, tgFileID)
+	if err != nil {
+		return fmt.Errorf("failed to increment usage count: %w", err)
+	}
+
+	return nil
 }

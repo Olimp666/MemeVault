@@ -8,14 +8,18 @@ const (
 	FileTypeGif   = "gif"
 
 	DefaultUserID = 0
+
+	SortByUsageCount = "usage_count"
+	SortByCreatedAt  = "created_at"
 )
 
 type Image struct {
-	ID        int64     `db:"id"`
-	UserID    int64     `db:"user_id"`
-	TgFileID  string    `db:"tg_file_id"`
-	FileType  string    `db:"file_type"`
-	CreatedAt time.Time `db:"created_at"`
+	ID         int64     `db:"id"`
+	UserID     int64     `db:"user_id"`
+	TgFileID   string    `db:"tg_file_id"`
+	FileType   string    `db:"file_type"`
+	UsageCount int       `db:"usage_count"`
+	CreatedAt  time.Time `db:"created_at"`
 }
 
 type ImageWithTags struct {

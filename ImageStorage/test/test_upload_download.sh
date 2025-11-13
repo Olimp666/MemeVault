@@ -356,6 +356,79 @@ else
     exit 1
 fi
 
+echo -e "${YELLOW}13. Тест счетчика использования...${NC}"
+
+# Загружаем тестовое изображение для проверки счетчика
+USAGE_TEST_FILE_ID="test_usage_counter_file_id"
+HTTP_CODE=$(curl -s -w "%{http_code}" -o /dev/null -X POST \
+  "$SERVER_URL/upload?user_id=$USER_ID&tg_file_id=$USAGE_TEST_FILE_ID&file_type=photo" \
+  -H "Content-Type: application/json" \
+  -d '{"tags": ["usage_test"]}')
+
+if [ "$HTTP_CODE" != "201" ]; then
+    echo -e "${RED}Ошибка: Не удалось загрузить изображение для теста счетчика${NC}"
+    exit 1
+fi
+
+# Увеличиваем счетчик первый раз
+HTTP_CODE=$(curl -s -w "%{http_code}" -o /tmp/usage_response.txt -X POST \
+  "$SERVER_URL/image/increment-usage?user_id=$USER_ID&tg_file_id=$USAGE_TEST_FILE_ID")
+
+if [ "$HTTP_CODE" != "200" ]; then
+    echo -e "${RED}Ошибка: Не удалось увеличить счетчик использования${NC}"
+    cat /tmp/usage_response.txt
+    exit 1
+fi
+
+RESPONSE=$(cat /tmp/usage_response.txt)
+if echo "$RESPONSE" | grep -q "Usage count incremented successfully"; then
+    echo -e "${GREEN}✓ Счетчик успешно увеличен (1-й раз)${NC}"
+else
+    echo -e "${RED}Ошибка: Неожиданный ответ при увеличении счетчика${NC}"
+    exit 1
+fi
+
+# Увеличиваем счетчик второй раз
+HTTP_CODE=$(curl -s -w "%{http_code}" -o /dev/null -X POST \
+  "$SERVER_URL/image/increment-usage?user_id=$USER_ID&tg_file_id=$USAGE_TEST_FILE_ID")
+
+if [ "$HTTP_CODE" != "200" ]; then
+    echo -e "${RED}Ошибка: Не удалось увеличить счетчик второй раз${NC}"
+    exit 1
+fi
+
+echo -e "${GREEN}✓ Счетчик успешно увеличен (2-й раз)${NC}"
+
+# Увеличиваем счетчик третий раз
+HTTP_CODE=$(curl -s -w "%{http_code}" -o /dev/null -X POST \
+  "$SERVER_URL/image/increment-usage?user_id=$USER_ID&tg_file_id=$USAGE_TEST_FILE_ID")
+
+if [ "$HTTP_CODE" != "200" ]; then
+    echo -e "${RED}Ошибка: Не удалось увеличить счетчик третий раз${NC}"
+    exit 1
+fi
+
+echo -e "${GREEN}✓ Счетчик успешно увеличен (3-й раз)${NC}"
+
+# Пытаемся увеличить счетчик для несуществующего изображения (должна быть ошибка)
+HTTP_CODE=$(curl -s -w "%{http_code}" -o /tmp/usage_error.txt -X POST \
+  "$SERVER_URL/image/increment-usage?user_id=$USER_ID&tg_file_id=nonexistent_file_id")
+
+if [ "$HTTP_CODE" == "500" ]; then
+    if grep -q "image not found" /tmp/usage_error.txt; then
+        echo -e "${GREEN}✓ Корректная обработка ошибки для несуществующего изображения${NC}"
+    else
+        echo -e "${RED}Ошибка: Неожиданное сообщение об ошибке${NC}"
+        cat /tmp/usage_error.txt
+        exit 1
+    fi
+else
+    echo -e "${RED}Ошибка: Ожидался HTTP 500 для несуществующего изображения, получен $HTTP_CODE${NC}"
+    exit 1
+fi
+
+echo -e "${GREEN}✓ Счетчик использования работает корректно${NC}"
+
 echo -e "${GREEN}=== Все тесты пройдены успешно ===${NC}"
 
 # Очистка

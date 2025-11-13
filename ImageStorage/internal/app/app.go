@@ -134,6 +134,7 @@ func (a *Application) initServer() error {
 	mux.HandleFunc("/image/delete", handler.DeleteImage)
 	mux.HandleFunc("/image/tags", handler.ReplaceTags)
 	mux.HandleFunc("/image/generate-description", handler.GenerateDescription)
+	mux.HandleFunc("/image/increment-usage", handler.IncrementUsageCount)
 
 	a.server = &http.Server{
 		Addr:    a.cfg.ServerURL,
