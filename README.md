@@ -4,6 +4,7 @@
 
 - [Презентация](https://drive.google.com/file/d/1la3qIDjxK2Uw4AWhG0UJvKus5rDE65Wq/view?usp=sharing)
 - [Демонстрация работы](https://docs.google.com/presentation/d/1SzfPGVvPaI074w0tTPhtC1wv-m5Bvqk4/edit?usp=drive_link&ouid=101136784242236257789&rtpof=true&sd=true)
+- [Описание проекта на википедии ИТМО](https://cs-uni.ru/index.php?title=MemeVault#.D0.A1.D1.81.D1.8B.D0.BB.D0.BA.D0.B8)
 
 ## 📋 Описание проекта
 
